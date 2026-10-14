@@ -1,0 +1,21 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "Dockerfile",
+      "server.js",
+      "package.json",
+      "README_AR.txt"
+    ],
+    "rewrites": [
+      {"source": "**", "destination": "/index.html"}
+    ],
+    "headers": [
+      {
+        "source": "/sw.js",
+        "headers": [{"key": "Cache-Control", "value": "no-cache"}]
+      }
+    ]
+  }
+}

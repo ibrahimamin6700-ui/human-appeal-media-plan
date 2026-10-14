@@ -13,6 +13,10 @@ android {
     namespace 'com.humanappeal.mediaplan'
     compileSdk 35
 
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         applicationId 'com.humanappeal.mediaplan'
         minSdk 24

@@ -2,6 +2,7 @@ plugins {
     id 'com.android.application'
 }
 
+// Dashboard UI is served live from the Apps Script deployment; this build syncs the Android wrapper with the current GitHub release flow.
 def githubRun = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
 def keystoreFile = System.getenv('ANDROID_KEYSTORE_FILE')
 def keystorePassword = System.getenv('ANDROID_KEYSTORE_PASSWORD')

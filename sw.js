@@ -1,7 +1,8 @@
-const CACHE='ha-media-plan-shell-v1';
+const CACHE='ha-media-plan-shell-v2';
 const SHELL=[
   './',
   './index.html',
+  './template.html',
   './config.js',
   './manifest.webmanifest',
   './assets/human-appeal-logo.svg',

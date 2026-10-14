@@ -1,7 +1,7 @@
 package com.humanappeal.mediaplan;
 
-import android.app.JobParameters;
-import android.app.JobService;
+import android.app.job.JobParameters;
+import android.app.job.JobService;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;

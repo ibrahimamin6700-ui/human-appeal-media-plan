@@ -4,17 +4,12 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
 import android.content.ClipData;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
@@ -29,7 +24,6 @@ import android.os.Looper;
 import android.util.Base64;
 import android.view.Gravity;
 import android.view.View;
-import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
@@ -61,13 +55,12 @@ import java.util.Locale;
 
 public class MainActivity extends Activity {
     public static final String DASHBOARD_URL = "https://script.google.com/macros/s/AKfycbzjgZ1nXxLTcFdeFCIEznOj2H0XCo9YGUeu1YF2pJdsQiOo_aM-Mn6HxKKNk8peEuM1Ig/exec";
+    public static final String CHANNEL_ID = "media_plan_updates_v2";
+    public static final String EXTRA_OPEN_ACCOUNT = "open_account";
+
     private static final String LATEST_RELEASE_API = "https://api.github.com/repos/ibrahimamin6700-ui/human-appeal-media-plan/releases/latest";
     private static final String APK_ASSET_NAME = "Human-Appeal-Media-Plan.apk";
-    private static final String CHANNEL_ID = "media_plan_updates";
-    private static final String PREFS = "media_plan_prefs";
-    private static final String KEY_LAST_DAY = "last_dashboard_day";
-    private static final int NOTIFICATION_ID = 1201;
-    private static final int SYNC_JOB_ID = 12026;
+    private static final int LEGACY_SYNC_JOB_ID = 12026;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private WebView webView;
@@ -75,11 +68,16 @@ public class MainActivity extends Activity {
     private View splashView;
     private boolean dashboardReady = false;
     private boolean servicesInitialized = false;
+    private long splashStartedAt = 0L;
+    private String pendingOpenAccount = null;
 
     @Override
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        pendingOpenAccount = normalizeAccount(getIntent() == null ? null : getIntent().getStringExtra(EXTRA_OPEN_ACCOUNT));
+        applySystemBars(HumanAppealApp.darkMode(this));
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.WHITE);
@@ -106,8 +104,7 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
-
-        safeEnableImmersiveMode();
+        splashStartedAt = System.currentTimeMillis();
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -132,7 +129,7 @@ public class MainActivity extends Activity {
             @Override
             public void onProgressChanged(WebView view, int progress) {
                 if (loadProgress != null) {
-                    int shown = Math.max(8, Math.min(progress, 96));
+                    int shown = Math.max(7, Math.min(progress, 96));
                     loadProgress.setProgress(shown);
                 }
             }
@@ -145,9 +142,10 @@ public class MainActivity extends Activity {
                 hideGoogleHostUi();
                 mainHandler.postDelayed(MainActivity.this::hideGoogleHostUi, 250);
                 mainHandler.postDelayed(MainActivity.this::hideGoogleHostUi, 900);
+                mainHandler.postDelayed(MainActivity.this::applyPendingAccount, 1150);
                 mainHandler.postDelayed(() -> {
                     if (!dashboardReady) hideSplash();
-                }, 3500);
+                }, 6000);
             }
 
             @Override
@@ -180,64 +178,39 @@ public class MainActivity extends Activity {
     }
 
     private View buildSplashView() {
-        LinearLayout splash = new LinearLayout(this);
-        splash.setOrientation(LinearLayout.VERTICAL);
-        splash.setGravity(Gravity.CENTER);
-        splash.setPadding(dp(34), dp(34), dp(34), dp(34));
+        FrameLayout splash = new FrameLayout(this);
         splash.setBackgroundColor(Color.WHITE);
 
-        ImageView logo = new ImageView(this);
-        Bitmap officialLogo = loadOfficialLogoBitmap();
-        if (officialLogo != null) logo.setImageBitmap(officialLogo);
-        else logo.setImageResource(R.drawable.ic_launcher);
-        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(138), dp(138));
-        logoParams.bottomMargin = dp(20);
-        splash.addView(logo, logoParams);
-
-        TextView title = new TextView(this);
-        title.setText("Human Appeal USA");
-        title.setTextColor(Color.rgb(34, 40, 50));
-        title.setTextSize(22);
-        title.setGravity(Gravity.CENTER);
-        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        splash.addView(title);
-
-        TextView subtitle = new TextView(this);
-        subtitle.setText("Media Plan");
-        subtitle.setTextColor(Color.rgb(126, 133, 145));
-        subtitle.setTextSize(13);
-        subtitle.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams subParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        subParams.topMargin = dp(5);
-        subParams.bottomMargin = dp(22);
-        splash.addView(subtitle, subParams);
+        ImageView image = new ImageView(this);
+        Bitmap splashBitmap = loadBase64Bitmap(R.raw.human_appeal_splash_b64);
+        if (splashBitmap != null) {
+            image.setImageBitmap(splashBitmap);
+        } else {
+            image.setImageResource(R.drawable.ic_launcher);
+        }
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        splash.addView(image, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
 
         loadProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         loadProgress.setMax(100);
-        loadProgress.setProgress(8);
+        loadProgress.setProgress(7);
+        loadProgress.setIndeterminate(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            loadProgress.setProgressTintList(ColorStateList.valueOf(Color.rgb(135, 76, 186)));
+            loadProgress.setProgressTintList(ColorStateList.valueOf(Color.rgb(119, 49, 181)));
+            loadProgress.setProgressBackgroundTintList(ColorStateList.valueOf(Color.argb(55, 119, 49, 181)));
         }
-        splash.addView(loadProgress, new LinearLayout.LayoutParams(dp(235), dp(5)));
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(230), dp(5));
+        progressParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        progressParams.bottomMargin = dp(34);
+        splash.addView(loadProgress, progressParams);
 
-        TextView loading = new TextView(this);
-        loading.setText("Loading live dashboard…");
-        loading.setTextColor(Color.rgb(150, 156, 165));
-        loading.setTextSize(11);
-        loading.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams loadingParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        loadingParams.topMargin = dp(11);
-        splash.addView(loading, loadingParams);
         return splash;
     }
 
-    private Bitmap loadOfficialLogoBitmap() {
-        try (InputStream input = getResources().openRawResource(R.raw.human_appeal_logo_b64);
+    private Bitmap loadBase64Bitmap(int rawResourceId) {
+        try (InputStream input = getResources().openRawResource(rawResourceId);
              BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
             StringBuilder encoded = new StringBuilder();
             String line;
@@ -251,19 +224,30 @@ public class MainActivity extends Activity {
 
     private void hideSplash() {
         if (dashboardReady && (splashView == null || splashView.getVisibility() != View.VISIBLE)) return;
+
+        long elapsed = System.currentTimeMillis() - splashStartedAt;
+        if (elapsed < 650) {
+            mainHandler.postDelayed(this::hideSplash, 650 - elapsed);
+            return;
+        }
+
         dashboardReady = true;
         if (loadProgress != null) loadProgress.setProgress(100);
+
         if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
             splashView.animate()
                     .alpha(0f)
-                    .setDuration(220)
+                    .setDuration(380)
                     .withEndAction(() -> splashView.setVisibility(View.GONE))
                     .start();
         }
+
         if (!servicesInitialized) {
             servicesInitialized = true;
-            mainHandler.postDelayed(this::safeInitializeServices, 850);
+            mainHandler.postDelayed(this::safeInitializeServices, 500);
         }
+
+        mainHandler.postDelayed(this::applyPendingAccount, 250);
     }
 
     private void hideGoogleHostUi() {
@@ -273,7 +257,7 @@ public class MainActivity extends Activity {
                 "document.body.style.margin='0';document.body.style.padding='0';" +
                 "var f=document.querySelector('iframe');" +
                 "if(f){f.style.setProperty('position','fixed','important');f.style.setProperty('inset','0','important');" +
-                "f.style.setProperty('width','100vw','important');f.style.setProperty('height','100vh','important');" +
+                "f.style.setProperty('width','100%','important');f.style.setProperty('height','100%','important');" +
                 "f.style.setProperty('border','0','important');f.style.setProperty('z-index','2147483647','important');}" +
                 "var terms=['الإبلاغ عن إساءة استخدام','مزيد من المعلومات','Report abuse','More info'];" +
                 "[].slice.call(document.querySelectorAll('div,header,section')).forEach(function(e){" +
@@ -323,36 +307,17 @@ public class MainActivity extends Activity {
     }
 
     private void safeInitializeServices() {
+        try { cancelLegacyBackgroundSync(); } catch (Throwable ignored) {}
         try { createNotificationChannel(this); } catch (Throwable ignored) {}
-        try { requestNotificationPermissionIfNeeded(); } catch (Throwable ignored) {}
-        try { scheduleBackgroundSync(); } catch (Throwable ignored) {}
-    }
-
-    private void safeEnableImmersiveMode() {
+        try { HumanAppealApp.applyTopicSubscription(this); } catch (Throwable ignored) {}
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                getWindow().setDecorFitsSystemWindows(false);
-                WindowInsetsController controller = getWindow().getInsetsController();
-                if (controller != null) {
-                    controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                    controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-                }
-            } else {
-                getWindow().getDecorView().setSystemUiVisibility(
-                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
-                        View.SYSTEM_UI_FLAG_FULLSCREEN |
-                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-            }
+            if (HumanAppealApp.notificationsEnabled(this)) requestNotificationPermissionIfNeeded();
         } catch (Throwable ignored) {}
     }
 
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) safeEnableImmersiveMode();
+    private void cancelLegacyBackgroundSync() {
+        JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+        if (scheduler != null) scheduler.cancel(LEGACY_SYNC_JOB_ID);
     }
 
     private void requestNotificationPermissionIfNeeded() {
@@ -362,88 +327,67 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void scheduleBackgroundSync() {
-        JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-        if (scheduler == null || scheduler.getPendingJob(SYNC_JOB_ID) != null) return;
-        JobInfo job = new JobInfo.Builder(SYNC_JOB_ID,
-                new ComponentName(this, DashboardSyncService.class))
-                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-                .setPeriodic(15 * 60 * 1000L)
-                .build();
-        scheduler.schedule(job);
-    }
-
     public static void createNotificationChannel(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager == null) return;
+
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
                     "Media Plan updates",
-                    NotificationManager.IMPORTANCE_DEFAULT);
-            channel.setDescription("Alerts when a new day of media-plan data is added.");
+                    NotificationManager.IMPORTANCE_HIGH);
+            channel.setDescription("Human Appeal USA and AR media-plan updates.");
+            channel.enableVibration(true);
+            channel.setSound(null, null);
             manager.createNotificationChannel(channel);
         }
     }
 
     public static void processDashboardUpdate(Context context, String json) {
-        try {
-            JSONObject root = new JSONObject(json);
-            JSONObject latest = root.optJSONObject("latest");
-            if (latest == null) latest = root;
-
-            String date = latest.optString("date", "");
-            int day = latest.optInt("dayNumber", 0);
-            double spend = latest.optDouble("spend", 0);
-            double conversions = latest.optDouble("conversions", 0);
-            double value = latest.optDouble("value", 0);
-            if (date.isEmpty()) return;
-
-            SharedPreferences preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-            String previousDay = preferences.getString(KEY_LAST_DAY, "");
-            if (previousDay.isEmpty()) {
-                preferences.edit().putString(KEY_LAST_DAY, date).apply();
-                return;
-            }
-            if (!date.equals(previousDay)) {
-                preferences.edit().putString(KEY_LAST_DAY, date).apply();
-                showNewDayNotification(context, day, spend, conversions, value);
-            }
-        } catch (Exception ignored) {}
+        // Legacy polling intentionally disabled. Firebase is the single notification source.
     }
 
-    private static void showNewDayNotification(Context context, int day, double spend, double conversions, double value) {
+    private void applySystemBars(boolean dark) {
         try {
-            if (Build.VERSION.SDK_INT >= 33 &&
-                    context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
+            getWindow().setStatusBarColor(dark ? Color.BLACK : Color.WHITE);
+            getWindow().setNavigationBarColor(dark ? Color.BLACK : Color.WHITE);
 
-            createNotificationChannel(context);
-            Intent open = new Intent(context, MainActivity.class);
-            open.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            PendingIntent pendingIntent = PendingIntent.getActivity(
-                    context, 1201, open,
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-            String body = "أرقام يوم " + day + " اتضافت • Spend £" + format0(spend) +
-                    " • Conv " + format0(conversions) + " • Value £" + format0(value);
-
-            Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                    ? new Notification.Builder(context, CHANNEL_ID)
-                    : new Notification.Builder(context);
-            builder.setSmallIcon(R.drawable.ic_launcher)
-                    .setContentTitle("Media Plan USA")
-                    .setContentText(body)
-                    .setStyle(new Notification.BigTextStyle().bigText(body))
-                    .setContentIntent(pendingIntent)
-                    .setAutoCancel(true);
-
-            NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-            if (manager != null) manager.notify(NOTIFICATION_ID, builder.build());
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                getWindow().setDecorFitsSystemWindows(true);
+                WindowInsetsController controller = getWindow().getInsetsController();
+                if (controller != null) {
+                    int mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS |
+                            WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                    controller.setSystemBarsAppearance(dark ? 0 : mask, mask);
+                }
+            } else {
+                int flags = 0;
+                if (!dark && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                }
+                if (!dark && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                }
+                getWindow().getDecorView().setSystemUiVisibility(flags);
+            }
         } catch (Throwable ignored) {}
     }
 
-    private static String format0(double value) {
-        return String.format(Locale.US, "%,.0f", value);
+    private String normalizeAccount(String account) {
+        if (account == null) return null;
+        return "ar".equalsIgnoreCase(account) ? "ar" : "usa";
+    }
+
+    private void applyPendingAccount() {
+        if (webView == null || pendingOpenAccount == null) return;
+        final String account = pendingOpenAccount;
+        pendingOpenAccount = null;
+        HumanAppealApp.setLastAccount(this, account);
+        String js = "(function(){try{if(typeof switchAccount==='function'){switchAccount('" + account + "');}" +
+                "else{localStorage.setItem('ha_media_plan_account','" + account + "');}}catch(e){}})();";
+        try {
+            webView.evaluateJavascript(js, null);
+        } catch (Throwable ignored) {}
     }
 
     public class AndroidBridge {
@@ -454,7 +398,32 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void onDashboardData(String json) {
-            new Thread(() -> processDashboardUpdate(getApplicationContext(), json)).start();
+            try {
+                JSONObject root = new JSONObject(json);
+                String account = root.optString("accountKey", "");
+                if ("ar".equalsIgnoreCase(account) || "usa".equalsIgnoreCase(account)) {
+                    HumanAppealApp.setLastAccount(getApplicationContext(), account);
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        @JavascriptInterface
+        public void setNotificationsEnabled(boolean enabled) {
+            HumanAppealApp.setNotificationsEnabled(getApplicationContext(), enabled);
+            if (enabled) {
+                runOnUiThread(MainActivity.this::requestNotificationPermissionIfNeeded);
+            }
+        }
+
+        @JavascriptInterface
+        public void setNotificationSound(String sound) {
+            HumanAppealApp.setNotificationSound(getApplicationContext(), sound);
+        }
+
+        @JavascriptInterface
+        public void setDarkMode(boolean dark) {
+            HumanAppealApp.setDarkMode(getApplicationContext(), dark);
+            runOnUiThread(() -> applySystemBars(dark));
         }
 
         @JavascriptInterface
@@ -511,7 +480,7 @@ public class MainActivity extends Activity {
 
     private String safeFilename(String filename) {
         String name = filename == null || filename.trim().isEmpty()
-                ? "Media-Plan-USA.png" : filename;
+                ? "Media-Plan.png" : filename;
         name = name.replaceAll("[^A-Za-z0-9._-]", "-");
         if (!name.toLowerCase(Locale.US).endsWith(".png")) name += ".png";
         return name;
@@ -593,7 +562,7 @@ public class MainActivity extends Activity {
             } finally {
                 if (connection != null) connection.disconnect();
             }
-        }).start();
+        }, "ha-update-check").start();
     }
 
     private void showUpdateDialog(String version, String apkUrl) {
@@ -628,6 +597,20 @@ public class MainActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        applySystemBars(HumanAppealApp.darkMode(this));
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        pendingOpenAccount = normalizeAccount(intent == null ? null : intent.getStringExtra(EXTRA_OPEN_ACCOUNT));
+        if (dashboardReady) mainHandler.postDelayed(this::applyPendingAccount, 150);
     }
 
     @Override

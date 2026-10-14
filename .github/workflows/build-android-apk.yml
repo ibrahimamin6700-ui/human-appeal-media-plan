@@ -7,6 +7,9 @@ on:
       - 'android-app/**'
       - '.github/workflows/build-android-apk.yml'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,16 +38,66 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build APK
+      - name: Check signing secrets
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASS" ]; then
+            echo "SIGNED_BUILD=true" >> "$GITHUB_ENV"
+          else
+            echo "SIGNED_BUILD=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Decode signing keystore
+        if: env.SIGNED_BUILD == 'true'
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_B64" | base64 --decode > android-app/app/humanappeal-release.jks
+
+      - name: Build signed release APK
+        if: env.SIGNED_BUILD == 'true'
+        working-directory: android-app
+        env:
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          gradle :app:assembleRelease --stacktrace \
+            -Pandroid.injected.signing.store.file="$GITHUB_WORKSPACE/android-app/app/humanappeal-release.jks" \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASS" \
+            -Pandroid.injected.signing.key.alias="humanappeal" \
+            -Pandroid.injected.signing.key.password="$KEYSTORE_PASS"
+
+      - name: Build debug APK until signing is configured
+        if: env.SIGNED_BUILD != 'true'
         working-directory: android-app
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Rename APK
-        run: cp android-app/app/build/outputs/apk/debug/app-debug.apk Human-Appeal-Media-Plan.apk
+      - name: Prepare APK
+        shell: bash
+        run: |
+          if [ "$SIGNED_BUILD" = "true" ]; then
+            cp android-app/app/build/outputs/apk/release/app-release.apk Human-Appeal-Media-Plan.apk
+          else
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk Human-Appeal-Media-Plan.apk
+          fi
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: Human-Appeal-Media-Plan-APK
           path: Human-Appeal-Media-Plan.apk
           if-no-files-found: error
+
+      - name: Publish latest GitHub Release
+        if: env.SIGNED_BUILD == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag -y || true
+          gh release create latest Human-Appeal-Media-Plan.apk \
+            --target "$GITHUB_SHA" \
+            --title "Human Appeal Media Plan - Latest" \
+            --notes "Latest signed Android build. Version 1.0.${GITHUB_RUN_NUMBER}. Install this APK over the previous version to update the app."

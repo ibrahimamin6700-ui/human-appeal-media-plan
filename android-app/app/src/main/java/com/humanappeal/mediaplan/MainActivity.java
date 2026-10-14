@@ -78,15 +78,18 @@ public class MainActivity extends Activity {
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        enableImmersiveMode();
-        createNotificationChannel(this);
-        requestNotificationPermissionIfNeeded();
-        scheduleBackgroundSync();
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.WHITE);
 
-        webView = new WebView(this);
+        try {
+            webView = new WebView(this);
+        } catch (Throwable webViewError) {
+            showFallbackScreen(root);
+            setContentView(root);
+            return;
+        }
+
         webView.setVisibility(View.INVISIBLE);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.setVerticalScrollBarEnabled(false);
@@ -99,6 +102,10 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
+
+        // Do all system-level setup only after the Activity has a visible window.
+        mainHandler.post(this::safeEnableImmersiveMode);
+        mainHandler.postDelayed(this::safeInitializeServices, 900);
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -149,12 +156,60 @@ public class MainActivity extends Activity {
         });
 
         if (savedInstanceState == null) {
-            webView.loadUrl(DASHBOARD_URL);
-            checkForGitHubUpdate();
+            try {
+                webView.loadUrl(DASHBOARD_URL);
+            } catch (Throwable loadError) {
+                openDashboardExternally();
+            }
+            mainHandler.postDelayed(this::checkForGitHubUpdate, 2200);
         } else {
-            webView.restoreState(savedInstanceState);
+            try {
+                webView.restoreState(savedInstanceState);
+            } catch (Throwable ignored) {
+                webView.loadUrl(DASHBOARD_URL);
+            }
             mainHandler.postDelayed(this::hideSplash, 650);
         }
+    }
+
+    private void showFallbackScreen(FrameLayout root) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        box.setPadding(dp(28), dp(28), dp(28), dp(28));
+        box.setBackgroundColor(Color.WHITE);
+
+        TextView title = new TextView(this);
+        title.setText("Human Appeal Media Plan");
+        title.setTextSize(22);
+        title.setTextColor(Color.rgb(34, 40, 50));
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setGravity(Gravity.CENTER);
+        box.addView(title);
+
+        TextView message = new TextView(this);
+        message.setText("Android WebView is unavailable. Tap to open the live dashboard in your browser.");
+        message.setTextSize(14);
+        message.setTextColor(Color.rgb(120, 126, 136));
+        message.setGravity(Gravity.CENTER);
+        message.setPadding(0, dp(18), 0, 0);
+        box.addView(message);
+        box.setOnClickListener(v -> openDashboardExternally());
+        root.addView(box, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+    }
+
+    private void openDashboardExternally() {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(DASHBOARD_URL)));
+        } catch (Exception ignored) {
+            Toast.makeText(this, "Unable to open dashboard", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void safeInitializeServices() {
+        try { createNotificationChannel(this); } catch (Throwable ignored) {}
+        try { requestNotificationPermissionIfNeeded(); } catch (Throwable ignored) {}
+        try { scheduleBackgroundSync(); } catch (Throwable ignored) {}
     }
 
     private String decodeJsString(String value) {
@@ -220,7 +275,7 @@ public class MainActivity extends Activity {
     }
 
     private void hideSplash() {
-        if (splashView == null || splashView.getVisibility() != View.VISIBLE) return;
+        if (splashView == null || splashView.getVisibility() != View.VISIBLE || webView == null) return;
         dashboardReady = true;
         webView.setVisibility(View.VISIBLE);
         webView.setAlpha(0f);
@@ -241,7 +296,11 @@ public class MainActivity extends Activity {
                 "[].slice.call(document.querySelectorAll('div,header,section')).forEach(function(e){var t=e.innerText||'';var r=e.getBoundingClientRect();" +
                 "if(r.top<180&&r.height<190&&((t.indexOf(terms[0])>=0&&t.indexOf(terms[1])>=0)||(t.indexOf(terms[2])>=0&&t.indexOf(terms[3])>=0)))e.style.setProperty('display','none','important');});" +
                 "}catch(e){}})();";
-        webView.evaluateJavascript(js, null);
+        try { webView.evaluateJavascript(js, null); } catch (Throwable ignored) {}
+    }
+
+    private void safeEnableImmersiveMode() {
+        try { enableImmersiveMode(); } catch (Throwable ignored) {}
     }
 
     private void enableImmersiveMode() {
@@ -262,24 +321,27 @@ public class MainActivity extends Activity {
 
     @Override public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) enableImmersiveMode();
+        if (hasFocus) safeEnableImmersiveMode();
     }
 
     private void requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= 33 && !isFinishing() && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1202);
         }
     }
 
     private void scheduleBackgroundSync() {
-        JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-        if (scheduler == null || scheduler.getPendingJob(SYNC_JOB_ID) != null) return;
-        JobInfo job = new JobInfo.Builder(SYNC_JOB_ID, new ComponentName(this, DashboardSyncService.class))
-                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-                .setPersisted(true)
-                .setPeriodic(15 * 60 * 1000L)
-                .build();
-        scheduler.schedule(job);
+        try {
+            JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            if (scheduler == null || scheduler.getPendingJob(SYNC_JOB_ID) != null) return;
+            JobInfo job = new JobInfo.Builder(SYNC_JOB_ID, new ComponentName(this, DashboardSyncService.class))
+                    .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                    .setPeriodic(15 * 60 * 1000L)
+                    .build();
+            scheduler.schedule(job);
+        } catch (Throwable ignored) {
+            // Background sync must never be allowed to crash the dashboard.
+        }
     }
 
     public static void createNotificationChannel(Context context) {
@@ -318,17 +380,19 @@ public class MainActivity extends Activity {
     }
 
     private static void showNewDayNotification(Context context, int day, double spend, double conv, double value) {
-        if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
-        createNotificationChannel(context);
-        Intent open = new Intent(context, MainActivity.class);
-        open.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        PendingIntent pi = PendingIntent.getActivity(context, 1201, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        String body = "أرقام يوم " + day + " اتضافت • Spend £" + format0(spend) + " • Conv " + format0(conv) + " • Value £" + format0(value);
-        Notification.Builder b = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? new Notification.Builder(context, CHANNEL_ID) : new Notification.Builder(context);
-        b.setSmallIcon(R.drawable.ic_launcher).setContentTitle("Media Plan USA").setContentText(body)
-                .setStyle(new Notification.BigTextStyle().bigText(body)).setContentIntent(pi).setAutoCancel(true);
-        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm != null) nm.notify(NOTIFICATION_ID, b.build());
+        try {
+            if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
+            createNotificationChannel(context);
+            Intent open = new Intent(context, MainActivity.class);
+            open.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            PendingIntent pi = PendingIntent.getActivity(context, 1201, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            String body = "أرقام يوم " + day + " اتضافت • Spend £" + format0(spend) + " • Conv " + format0(conv) + " • Value £" + format0(value);
+            Notification.Builder b = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? new Notification.Builder(context, CHANNEL_ID) : new Notification.Builder(context);
+            b.setSmallIcon(R.drawable.ic_launcher).setContentTitle("Media Plan USA").setContentText(body)
+                    .setStyle(new Notification.BigTextStyle().bigText(body)).setContentIntent(pi).setAutoCancel(true);
+            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.notify(NOTIFICATION_ID, b.build());
+        } catch (Throwable ignored) {}
     }
 
     private static String format0(double value) { return String.format(Locale.US, "%,.0f", value); }
@@ -470,7 +534,9 @@ public class MainActivity extends Activity {
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 
     @Override protected void onSaveInstanceState(Bundle outState) {
-        webView.saveState(outState);
+        if (webView != null) {
+            try { webView.saveState(outState); } catch (Throwable ignored) {}
+        }
         super.onSaveInstanceState(outState);
     }
 

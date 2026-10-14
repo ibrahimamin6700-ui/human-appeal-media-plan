@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#6f2dbd">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="HA Media Plan">
+  <title>Human Appeal Media Plan</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon.svg">
+  <style>
+    :root{--purple:#6f2dbd;--purple2:#9250d4;--bg:#f4f5f8;--ink:#20242d;--muted:#7d8593;--line:#e4e7ed;--good:#169c68;--bad:#df5368}
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink)}button,input{font:inherit}
+    #app,#dashboard{position:fixed;inset:0}#dashboard{width:100%;height:100%;border:0;background:#fff;opacity:0;transition:.2s opacity}#dashboard.ready{opacity:1}
+    .splash,.connect{position:fixed;inset:0;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 50% 30%,#fff 0 30%,#f6f3fa 65%,#f1eef7 100%);z-index:20}.splash.hidden,.connect{display:none}.connect.show{display:grid}
+    .brand{text-align:center}.logo{width:100px;height:100px;border-radius:24px;background:#fff;object-fit:contain;border:1px solid #eee;box-shadow:0 18px 50px rgba(87,49,128,.12)}h1{font-size:22px;margin:14px 0 4px;letter-spacing:-.04em}.muted{font-size:11px;color:var(--muted);font-weight:700}
+    .loader{width:110px;height:5px;background:#e9e3ef;border-radius:999px;overflow:hidden;margin:17px auto}.loader span{display:block;width:40%;height:100%;background:linear-gradient(90deg,var(--purple),#aa68e4);animation:load 1.1s infinite;border-radius:999px}@keyframes load{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+    .card{width:min(430px,100%);background:#fff;border:1px solid var(--line);border-radius:20px;padding:22px;box-shadow:0 22px 60px rgba(34,39,56,.1)}.head{display:flex;gap:12px;align-items:center}.head img{width:54px;height:54px;border-radius:14px;border:1px solid #eee;background:#fff}.title{font-size:18px;font-weight:950}.sub{font-size:10px;color:var(--muted);font-weight:700;margin-top:3px;line-height:1.45}.label{display:block;margin:18px 0 7px;font-size:9px;font-weight:900;color:#5d6572;text-transform:uppercase}.input{width:100%;border:1px solid #dfe2e8;background:#fafbfc;border-radius:11px;padding:12px 13px;outline:none;font-size:12px}.input:focus{border-color:#b790df;box-shadow:0 0 0 3px rgba(111,45,189,.08)}.actions{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:11px}.btn{border:0;border-radius:10px;padding:11px 14px;font-size:11px;font-weight:900;cursor:pointer}.primary{background:linear-gradient(135deg,var(--purple),var(--purple2));color:#fff}.secondary{background:#f2f3f6;color:#58606c;border:1px solid #e4e6ea}.note{margin-top:11px;padding:9px 10px;background:#f8f6fb;border-radius:9px;font-size:9px;line-height:1.45;color:#746b80;font-weight:750}
+    .floating{position:fixed;z-index:30;right:12px;bottom:12px;display:flex;gap:8px}.float{width:42px;height:42px;border:1px solid rgba(220,223,230,.92);border-radius:13px;background:rgba(255,255,255,.94);box-shadow:0 8px 24px rgba(35,41,58,.12);display:grid;place-items:center;cursor:pointer}.install{width:auto;padding:0 12px;font-size:10px;font-weight:900;display:none}.install.show{display:grid}.status{position:fixed;z-index:30;left:12px;bottom:12px;display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(222,225,231,.92);border-radius:999px;background:rgba(255,255,255,.94);font-size:8px;font-weight:900;color:#68707b}.status i{width:7px;height:7px;border-radius:50%;background:var(--good)}.status.offline i{background:var(--bad)}
+    .modalWrap{position:fixed;inset:0;z-index:40;background:rgba(25,28,36,.28);display:none;align-items:flex-end;justify-content:center;padding:12px}.modalWrap.show{display:flex}.modal{width:min(470px,100%);background:#fff;border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 26px 70px rgba(25,29,41,.22)}.modalActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.danger{color:#b33a4b;background:#fff2f4;border:1px solid #f0ccd2}
+  </style>
+</head>
+<body>
+<div id="app">
+  <iframe id="dashboard" title="Human Appeal Media Plan Dashboard" allow="clipboard-write"></iframe>
+  <div class="splash" id="splash"><div class="brand"><img class="logo" src="assets/human-appeal-logo.svg" alt="Human Appeal"><h1>Human Appeal Media Plan</h1><div class="muted" id="splashText">Connecting to live dashboard…</div><div class="loader"><span></span></div></div></div>
+  <div class="connect" id="connect"><div class="card"><div class="head"><img src="assets/human-appeal-logo.svg" alt="Human Appeal"><div><div class="title">Connect Media Plan</div><div class="sub">Paste your deployed Google Apps Script Web App URL once. The app saves it on this device.</div></div></div><label class="label" for="url">Apps Script Web App URL</label><input class="input" id="url" type="url" placeholder="https://script.google.com/macros/s/.../exec"><div class="actions"><button class="btn primary" id="connectBtn">Connect Dashboard</button><button class="btn secondary" id="openBtn">Open ↗</button></div><div class="note">Use the <b>/exec</b> URL from Apps Script Deploy → Manage deployments. Google Sheets stays your live data source.</div></div></div>
+  <div class="floating"><button class="float install" id="installBtn">＋ Install App</button><button class="float" id="settingsBtn">⚙</button></div>
+  <div class="status" id="status"><i></i><span>Online</span></div>
+  <div class="modalWrap" id="modal"><div class="modal"><div class="title">App Settings</div><div class="sub">Change or reopen the connected dashboard.</div><label class="label" for="settingsUrl">Dashboard URL</label><input class="input" id="settingsUrl" type="url"><div class="modalActions"><button class="btn primary" id="saveBtn">Save & Reload</button><button class="btn secondary" id="externalBtn">Open Dashboard ↗</button><button class="btn secondary" id="closeBtn">Close</button><button class="btn secondary danger" id="disconnectBtn">Disconnect</button></div></div></div>
+</div>
+<script src="config.js"></script>
+<script>
+const KEY='ha_media_plan_dashboard_url';const frame=document.getElementById('dashboard'),splash=document.getElementById('splash'),connectScreen=document.getElementById('connect'),url=document.getElementById('url'),settingsUrl=document.getElementById('settingsUrl'),modal=document.getElementById('modal'),installBtn=document.getElementById('installBtn'),status=document.getElementById('status');let deferredPrompt=null;
+function clean(v){try{const u=new URL((v||'').trim());return u.protocol==='https:'?u.href:''}catch(e){return''}}
+function saved(){return localStorage.getItem(KEY)||(window.APP_CONFIG&&APP_CONFIG.DEFAULT_DASHBOARD_URL)||''}
+function showConnect(){splash.classList.add('hidden');connectScreen.classList.add('show');url.value=saved()}
+function load(v){const u=clean(v);if(!u){url.focus();return}localStorage.setItem(KEY,u);connectScreen.classList.remove('show');splash.classList.remove('hidden');frame.classList.remove('ready');frame.src=u}
+frame.addEventListener('load',()=>{if(frame.src)setTimeout(()=>{frame.classList.add('ready');splash.classList.add('hidden')},250)});
+document.getElementById('connectBtn').onclick=()=>load(url.value);document.getElementById('openBtn').onclick=()=>{const u=clean(url.value);if(u)window.open(u,'_blank','noopener')};url.addEventListener('keydown',e=>{if(e.key==='Enter')load(url.value)});
+document.getElementById('settingsBtn').onclick=()=>{settingsUrl.value=saved();modal.classList.add('show')};document.getElementById('closeBtn').onclick=()=>modal.classList.remove('show');document.getElementById('saveBtn').onclick=()=>{const u=clean(settingsUrl.value);if(u){modal.classList.remove('show');load(u)}};document.getElementById('externalBtn').onclick=()=>{const u=clean(settingsUrl.value||saved());if(u)window.open(u,'_blank','noopener')};document.getElementById('disconnectBtn').onclick=()=>{localStorage.removeItem(KEY);frame.src='about:blank';frame.classList.remove('ready');modal.classList.remove('show');showConnect()};
+function network(){const on=navigator.onLine;status.classList.toggle('offline',!on);status.querySelector('span').textContent=on?'Online':'Offline'}window.addEventListener('online',network);window.addEventListener('offline',network);network();
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;installBtn.classList.add('show')});installBtn.onclick=async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;installBtn.classList.remove('show')};window.addEventListener('appinstalled',()=>installBtn.classList.remove('show'));
+if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));const initial=saved();if(initial)load(initial);else showConnect();
+</script>
+</body>
+</html>

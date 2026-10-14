@@ -1,0 +1,19 @@
+{
+  "name": "Human Appeal Media Plan",
+  "short_name": "HA Media Plan",
+  "description": "Live Human Appeal USA media plan dashboard connected to Google Sheets.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f5f8",
+  "theme_color": "#6f2dbd",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

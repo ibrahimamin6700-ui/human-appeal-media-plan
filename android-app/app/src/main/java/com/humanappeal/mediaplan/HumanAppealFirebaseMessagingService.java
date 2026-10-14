@@ -24,6 +24,10 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
     private static final int USA_NOTIFICATION_ID = 2201;
     private static final int AR_NOTIFICATION_ID = 2202;
 
+    private static final Object SOUND_LOCK = new Object();
+    private static AudioTrack activeTrack;
+    private static Ringtone activeRingtone;
+
     @Override
     public void onNewToken(String token) {
         super.onNewToken(token);
@@ -100,16 +104,21 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
             if (manager != null) {
                 int id = "ar".equals(accountKey) ? AR_NOTIFICATION_ID : USA_NOTIFICATION_ID;
                 manager.notify(id, builder.build());
-                playSelectedSound(HumanAppealApp.notificationSound(this));
+                playSelectedSound(this, HumanAppealApp.notificationSound(this));
             }
         } catch (Throwable ignored) {
         }
     }
 
-    private void playSelectedSound(String sound) {
+    public static void playSelectedSound(Context context, String sound) {
+        if (context == null) return;
+
+        final Context appContext = context.getApplicationContext();
         final String safe = HumanAppealApp.sanitizeSound(sound);
+        stopActiveSound();
+
         if ("default".equals(safe)) {
-            playDefaultNotificationSound();
+            playDefaultNotificationSound(appContext);
             return;
         }
 
@@ -135,11 +144,17 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
                         .build();
 
                 track.write(samples, 0, samples.length);
+                synchronized (SOUND_LOCK) {
+                    activeTrack = track;
+                }
                 track.play();
                 long durationMs = Math.max(120, (samples.length * 1000L) / sampleRate);
                 Thread.sleep(durationMs + 80);
             } catch (Throwable ignored) {
             } finally {
+                synchronized (SOUND_LOCK) {
+                    if (activeTrack == track) activeTrack = null;
+                }
                 if (track != null) {
                     try { track.stop(); } catch (Throwable ignored) {}
                     try { track.release(); } catch (Throwable ignored) {}
@@ -148,16 +163,37 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
         }, "ha-notification-tone").start();
     }
 
-    private void playDefaultNotificationSound() {
+    private static void stopActiveSound() {
+        synchronized (SOUND_LOCK) {
+            if (activeRingtone != null) {
+                try { activeRingtone.stop(); } catch (Throwable ignored) {}
+                activeRingtone = null;
+            }
+            if (activeTrack != null) {
+                try { activeTrack.pause(); } catch (Throwable ignored) {}
+                try { activeTrack.flush(); } catch (Throwable ignored) {}
+                try { activeTrack.stop(); } catch (Throwable ignored) {}
+                try { activeTrack.release(); } catch (Throwable ignored) {}
+                activeTrack = null;
+            }
+        }
+    }
+
+    private static void playDefaultNotificationSound(Context context) {
         try {
             Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-            Ringtone ringtone = RingtoneManager.getRingtone(this, uri);
-            if (ringtone != null) ringtone.play();
+            Ringtone ringtone = RingtoneManager.getRingtone(context, uri);
+            if (ringtone != null) {
+                synchronized (SOUND_LOCK) {
+                    activeRingtone = ringtone;
+                }
+                ringtone.play();
+            }
         } catch (Throwable ignored) {
         }
     }
 
-    private short[] synthesizeTone(String style, int sampleRate) {
+    private static short[] synthesizeTone(String style, int sampleRate) {
         final double duration;
         if ("gentle_bell".equals(style)) duration = 0.58;
         else if ("soft_ping".equals(style)) duration = 0.24;

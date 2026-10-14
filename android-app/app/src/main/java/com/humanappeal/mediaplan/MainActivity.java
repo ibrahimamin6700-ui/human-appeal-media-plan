@@ -11,11 +11,14 @@ import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.drawable.ClipDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -27,6 +30,7 @@ import android.view.View;
 import android.view.WindowInsetsController;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -63,9 +67,11 @@ public class MainActivity extends Activity {
     private static final int LEGACY_SYNC_JOB_ID = 12026;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private FrameLayout rootView;
     private WebView webView;
     private ProgressBar loadProgress;
     private View splashView;
+    private View offlineView;
     private boolean dashboardReady = false;
     private boolean servicesInitialized = false;
     private long splashStartedAt = 0L;
@@ -76,17 +82,18 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        pendingOpenAccount = normalizeAccount(getIntent() == null ? null : getIntent().getStringExtra(EXTRA_OPEN_ACCOUNT));
+        pendingOpenAccount = normalizeAccount(
+                getIntent() == null ? null : getIntent().getStringExtra(EXTRA_OPEN_ACCOUNT));
         applySystemBars(HumanAppealApp.darkMode(this));
 
-        FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.WHITE);
+        rootView = new FrameLayout(this);
+        rootView.setBackgroundColor(Color.BLACK);
 
         try {
             webView = new WebView(this);
         } catch (Throwable error) {
-            showFallbackScreen(root);
-            setContentView(root);
+            showFallbackScreen(rootView);
+            setContentView(rootView);
             return;
         }
 
@@ -95,15 +102,15 @@ public class MainActivity extends Activity {
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.setVerticalScrollBarEnabled(false);
         webView.setHorizontalScrollBarEnabled(false);
-        root.addView(webView, new FrameLayout.LayoutParams(
+        rootView.addView(webView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
 
         splashView = buildSplashView();
-        root.addView(splashView, new FrameLayout.LayoutParams(
+        rootView.addView(splashView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        setContentView(root);
+        setContentView(rootView);
         splashStartedAt = System.currentTimeMillis();
 
         WebSettings settings = webView.getSettings();
@@ -128,7 +135,7 @@ public class MainActivity extends Activity {
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onProgressChanged(WebView view, int progress) {
-                if (loadProgress != null) {
+                if (loadProgress != null && splashView != null && splashView.getVisibility() == View.VISIBLE) {
                     int shown = Math.max(7, Math.min(progress, 96));
                     loadProgress.setProgress(shown);
                 }
@@ -139,6 +146,10 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                if ("about:blank".equalsIgnoreCase(url)) return;
+
+                webView.setVisibility(View.VISIBLE);
+                hideOfflineScreen();
                 hideGoogleHostUi();
                 mainHandler.postDelayed(MainActivity.this::hideGoogleHostUi, 250);
                 mainHandler.postDelayed(MainActivity.this::hideGoogleHostUi, 900);
@@ -146,6 +157,17 @@ public class MainActivity extends Activity {
                 mainHandler.postDelayed(() -> {
                     if (!dashboardReady) hideSplash();
                 }, 6000);
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request != null && request.isForMainFrame()) {
+                    try { view.stopLoading(); } catch (Throwable ignored) {}
+                    showOfflineScreen();
+                    try { view.loadUrl("about:blank"); } catch (Throwable ignored) {}
+                    return;
+                }
+                super.onReceivedError(view, request, error);
             }
 
             @Override
@@ -179,7 +201,7 @@ public class MainActivity extends Activity {
 
     private View buildSplashView() {
         FrameLayout splash = new FrameLayout(this);
-        splash.setBackgroundColor(Color.WHITE);
+        splash.setBackgroundColor(Color.rgb(250, 248, 253));
 
         ImageView image = new ImageView(this);
         Bitmap splashBitmap = loadBase64Bitmap(R.raw.human_appeal_splash_b64);
@@ -188,7 +210,8 @@ public class MainActivity extends Activity {
         } else {
             image.setImageResource(R.drawable.ic_launcher);
         }
-        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setBackgroundColor(Color.rgb(250, 248, 253));
+        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
         splash.addView(image, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
@@ -197,16 +220,43 @@ public class MainActivity extends Activity {
         loadProgress.setMax(100);
         loadProgress.setProgress(7);
         loadProgress.setIndeterminate(false);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            loadProgress.setProgressTintList(ColorStateList.valueOf(Color.rgb(119, 49, 181)));
-            loadProgress.setProgressBackgroundTintList(ColorStateList.valueOf(Color.argb(55, 119, 49, 181)));
-        }
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(230), dp(5));
+        loadProgress.setProgressDrawable(buildGlossyProgressDrawable());
+        loadProgress.setElevation(dp(9));
+
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(270), dp(17));
         progressParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        progressParams.bottomMargin = dp(34);
+        progressParams.bottomMargin = dp(170);
         splash.addView(loadProgress, progressParams);
 
+        splash.post(() -> {
+            if (loadProgress == null || splash.getHeight() <= 0) return;
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) loadProgress.getLayoutParams();
+            int desired = Math.round(splash.getHeight() * 0.22f);
+            params.bottomMargin = Math.max(dp(135), Math.min(desired, dp(230)));
+            loadProgress.setLayoutParams(params);
+        });
+
         return splash;
+    }
+
+    private Drawable buildGlossyProgressDrawable() {
+        GradientDrawable track = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.rgb(255, 255, 255), Color.rgb(239, 231, 249)});
+        track.setCornerRadius(dp(20));
+        track.setStroke(dp(1), Color.argb(110, 111, 45, 189));
+
+        GradientDrawable fill = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.rgb(173, 108, 238), Color.rgb(111, 45, 189), Color.rgb(89, 27, 164)});
+        fill.setCornerRadius(dp(20));
+        fill.setStroke(dp(1), Color.argb(145, 255, 255, 255));
+
+        ClipDrawable clippedFill = new ClipDrawable(fill, Gravity.LEFT, ClipDrawable.HORIZONTAL);
+        LayerDrawable layers = new LayerDrawable(new Drawable[]{track, clippedFill});
+        layers.setId(0, android.R.id.background);
+        layers.setId(1, android.R.id.progress);
+        return layers;
     }
 
     private Bitmap loadBase64Bitmap(int rawResourceId) {
@@ -248,6 +298,112 @@ public class MainActivity extends Activity {
         }
 
         mainHandler.postDelayed(this::applyPendingAccount, 250);
+    }
+
+    private void showOfflineScreen() {
+        runOnUiThread(() -> {
+            if (rootView == null) return;
+            if (splashView != null) {
+                splashView.animate().cancel();
+                splashView.setAlpha(1f);
+                splashView.setVisibility(View.GONE);
+            }
+            if (webView != null) webView.setVisibility(View.INVISIBLE);
+
+            if (offlineView == null) {
+                offlineView = buildOfflineView();
+                rootView.addView(offlineView, new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT));
+            }
+            offlineView.setVisibility(View.VISIBLE);
+            offlineView.setAlpha(1f);
+            offlineView.bringToFront();
+        });
+    }
+
+    private void hideOfflineScreen() {
+        if (offlineView != null) offlineView.setVisibility(View.GONE);
+    }
+
+    private View buildOfflineView() {
+        LinearLayout screen = new LinearLayout(this);
+        screen.setOrientation(LinearLayout.VERTICAL);
+        screen.setGravity(Gravity.CENTER);
+        screen.setPadding(dp(28), dp(36), dp(28), dp(36));
+        screen.setBackgroundColor(Color.rgb(248, 245, 252));
+
+        ImageView logo = new ImageView(this);
+        Bitmap logoBitmap = loadBase64Bitmap(R.raw.human_appeal_logo_b64);
+        if (logoBitmap != null) logo.setImageBitmap(logoBitmap);
+        else logo.setImageResource(R.drawable.ic_launcher);
+        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(150), dp(82));
+        logoParams.bottomMargin = dp(30);
+        screen.addView(logo, logoParams);
+
+        TextView icon = new TextView(this);
+        icon.setText("!");
+        icon.setTextSize(30);
+        icon.setTextColor(Color.WHITE);
+        icon.setGravity(Gravity.CENTER);
+        icon.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        GradientDrawable iconBg = new GradientDrawable();
+        iconBg.setShape(GradientDrawable.OVAL);
+        iconBg.setColor(Color.rgb(111, 45, 189));
+        icon.setBackground(iconBg);
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(66), dp(66));
+        iconParams.bottomMargin = dp(24);
+        screen.addView(icon, iconParams);
+
+        TextView title = new TextView(this);
+        title.setText("No Internet Connection");
+        title.setTextSize(23);
+        title.setTextColor(Color.rgb(34, 30, 42));
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setGravity(Gravity.CENTER);
+        screen.addView(title);
+
+        TextView message = new TextView(this);
+        message.setText("Check your connection and try again.\nتحقق من اتصال الإنترنت ثم حاول مرة أخرى.");
+        message.setTextSize(14);
+        message.setTextColor(Color.rgb(115, 106, 126));
+        message.setGravity(Gravity.CENTER);
+        message.setLineSpacing(dp(3), 1f);
+        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        messageParams.topMargin = dp(12);
+        messageParams.bottomMargin = dp(30);
+        screen.addView(message, messageParams);
+
+        TextView retry = new TextView(this);
+        retry.setText("Retry");
+        retry.setTextSize(15);
+        retry.setTextColor(Color.WHITE);
+        retry.setGravity(Gravity.CENTER);
+        retry.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        retry.setPadding(dp(42), dp(13), dp(42), dp(13));
+        GradientDrawable retryBg = new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.rgb(98, 39, 176), Color.rgb(139, 73, 204)});
+        retryBg.setCornerRadius(dp(24));
+        retry.setBackground(retryBg);
+        retry.setElevation(dp(5));
+        retry.setOnClickListener(v -> retryDashboard());
+        screen.addView(retry, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        return screen;
+    }
+
+    private void retryDashboard() {
+        if (webView == null) return;
+        try {
+            webView.stopLoading();
+            webView.loadUrl(DASHBOARD_URL);
+        } catch (Throwable ignored) {}
     }
 
     private void hideGoogleHostUi() {
@@ -349,8 +505,8 @@ public class MainActivity extends Activity {
 
     private void applySystemBars(boolean dark) {
         try {
-            getWindow().setStatusBarColor(dark ? Color.BLACK : Color.WHITE);
-            getWindow().setNavigationBarColor(dark ? Color.BLACK : Color.WHITE);
+            getWindow().setStatusBarColor(Color.BLACK);
+            getWindow().setNavigationBarColor(Color.BLACK);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 getWindow().setDecorFitsSystemWindows(true);
@@ -358,17 +514,10 @@ public class MainActivity extends Activity {
                 if (controller != null) {
                     int mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS |
                             WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
-                    controller.setSystemBarsAppearance(dark ? 0 : mask, mask);
+                    controller.setSystemBarsAppearance(0, mask);
                 }
             } else {
-                int flags = 0;
-                if (!dark && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-                }
-                if (!dark && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-                }
-                getWindow().getDecorView().setSystemUiVisibility(flags);
+                getWindow().getDecorView().setSystemUiVisibility(0);
             }
         } catch (Throwable ignored) {}
     }
@@ -418,6 +567,12 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void setNotificationSound(String sound) {
             HumanAppealApp.setNotificationSound(getApplicationContext(), sound);
+            HumanAppealFirebaseMessagingService.playSelectedSound(getApplicationContext(), sound);
+        }
+
+        @JavascriptInterface
+        public void previewNotificationSound(String sound) {
+            HumanAppealFirebaseMessagingService.playSelectedSound(getApplicationContext(), sound);
         }
 
         @JavascriptInterface
@@ -609,7 +764,8 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        pendingOpenAccount = normalizeAccount(intent == null ? null : intent.getStringExtra(EXTRA_OPEN_ACCOUNT));
+        pendingOpenAccount = normalizeAccount(
+                intent == null ? null : intent.getStringExtra(EXTRA_OPEN_ACCOUNT));
         if (dashboardReady) mainHandler.postDelayed(this::applyPendingAccount, 150);
     }
 
@@ -621,7 +777,12 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
+        if (offlineView != null && offlineView.getVisibility() == View.VISIBLE) {
+            super.onBackPressed();
+        } else if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            super.onBackPressed();
+        }
     }
 }

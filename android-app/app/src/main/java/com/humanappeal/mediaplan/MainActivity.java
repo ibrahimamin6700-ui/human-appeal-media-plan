@@ -73,6 +73,7 @@ public class MainActivity extends Activity {
     private View splashView;
     private View offlineView;
     private boolean dashboardReady = false;
+    private boolean mainFrameLoadFailed = false;
     private boolean servicesInitialized = false;
     private long splashStartedAt = 0L;
     private String pendingOpenAccount = null;
@@ -137,16 +138,26 @@ public class MainActivity extends Activity {
             public void onProgressChanged(WebView view, int progress) {
                 if (loadProgress != null && splashView != null && splashView.getVisibility() == View.VISIBLE) {
                     int shown = Math.max(7, Math.min(progress, 96));
-                    loadProgress.setProgress(shown);
+                    loadProgress.setProgress(shown, true);
                 }
             }
         });
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                if (!"about:blank".equalsIgnoreCase(url)) mainFrameLoadFailed = false;
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 if ("about:blank".equalsIgnoreCase(url)) return;
+                if (mainFrameLoadFailed) {
+                    showOfflineScreen();
+                    return;
+                }
 
                 webView.setVisibility(View.VISIBLE);
                 hideOfflineScreen();
@@ -162,6 +173,7 @@ public class MainActivity extends Activity {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request != null && request.isForMainFrame()) {
+                    mainFrameLoadFailed = true;
                     try { view.stopLoading(); } catch (Throwable ignored) {}
                     showOfflineScreen();
                     try { view.loadUrl("about:blank"); } catch (Throwable ignored) {}
@@ -187,11 +199,13 @@ public class MainActivity extends Activity {
         });
 
         if (savedInstanceState == null) {
+            mainFrameLoadFailed = false;
             webView.loadUrl(DASHBOARD_URL);
         } else {
             try {
                 webView.restoreState(savedInstanceState);
             } catch (Throwable ignored) {
+                mainFrameLoadFailed = false;
                 webView.loadUrl(DASHBOARD_URL);
             }
         }
@@ -204,7 +218,15 @@ public class MainActivity extends Activity {
         splash.setBackgroundColor(Color.rgb(250, 248, 253));
 
         ImageView image = new ImageView(this);
-        Bitmap splashBitmap = loadBase64Bitmap(R.raw.human_appeal_splash_b64);
+        Bitmap splashBitmap = loadBase64Bitmap(
+                R.raw.human_appeal_splash_b64,
+                R.raw.human_appeal_splash_b64_2,
+                R.raw.human_appeal_splash_b64_3,
+                R.raw.human_appeal_splash_b64_4,
+                R.raw.human_appeal_splash_b64_5,
+                R.raw.human_appeal_splash_b64_6,
+                R.raw.human_appeal_splash_b64_7,
+                R.raw.human_appeal_splash_b64_8);
         if (splashBitmap != null) {
             image.setImageBitmap(splashBitmap);
         } else {
@@ -228,12 +250,31 @@ public class MainActivity extends Activity {
         progressParams.bottomMargin = dp(170);
         splash.addView(loadProgress, progressParams);
 
+        TextView loadingText = new TextView(this);
+        loadingText.setText("Loading Media Plan...");
+        loadingText.setTextSize(12);
+        loadingText.setTextColor(Color.rgb(103, 68, 135));
+        loadingText.setGravity(Gravity.CENTER);
+        loadingText.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        FrameLayout.LayoutParams textParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT);
+        textParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        textParams.bottomMargin = dp(138);
+        splash.addView(loadingText, textParams);
+
         splash.post(() -> {
             if (loadProgress == null || splash.getHeight() <= 0) return;
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) loadProgress.getLayoutParams();
             int desired = Math.round(splash.getHeight() * 0.22f);
-            params.bottomMargin = Math.max(dp(135), Math.min(desired, dp(230)));
+            int progressBottom = Math.max(dp(135), Math.min(desired, dp(230)));
+            params.bottomMargin = progressBottom;
             loadProgress.setLayoutParams(params);
+
+            FrameLayout.LayoutParams labelParams =
+                    (FrameLayout.LayoutParams) loadingText.getLayoutParams();
+            labelParams.bottomMargin = Math.max(dp(104), progressBottom - dp(32));
+            loadingText.setLayoutParams(labelParams);
         });
 
         return splash;
@@ -259,12 +300,17 @@ public class MainActivity extends Activity {
         return layers;
     }
 
-    private Bitmap loadBase64Bitmap(int rawResourceId) {
-        try (InputStream input = getResources().openRawResource(rawResourceId);
-             BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
+    private Bitmap loadBase64Bitmap(int... rawResourceIds) {
+        try {
             StringBuilder encoded = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) encoded.append(line.trim());
+            for (int rawResourceId : rawResourceIds) {
+                try (InputStream input = getResources().openRawResource(rawResourceId);
+                     BufferedReader reader = new BufferedReader(
+                             new InputStreamReader(input, StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) encoded.append(line.trim());
+                }
+            }
             byte[] bytes = Base64.decode(encoded.toString(), Base64.DEFAULT);
             return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
         } catch (Throwable ignored) {
@@ -282,7 +328,7 @@ public class MainActivity extends Activity {
         }
 
         dashboardReady = true;
-        if (loadProgress != null) loadProgress.setProgress(100);
+        if (loadProgress != null) loadProgress.setProgress(100, true);
 
         if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
             splashView.animate()
@@ -401,6 +447,7 @@ public class MainActivity extends Activity {
     private void retryDashboard() {
         if (webView == null) return;
         try {
+            mainFrameLoadFailed = false;
             webView.stopLoading();
             webView.loadUrl(DASHBOARD_URL);
         } catch (Throwable ignored) {}
@@ -567,7 +614,6 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void setNotificationSound(String sound) {
             HumanAppealApp.setNotificationSound(getApplicationContext(), sound);
-            HumanAppealFirebaseMessagingService.playSelectedSound(getApplicationContext(), sound);
         }
 
         @JavascriptInterface

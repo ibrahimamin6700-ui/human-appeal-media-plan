@@ -1,0 +1,12 @@
+{
+  "name": "human-appeal-media-plan-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Installable PWA shell for the Human Appeal Media Plan dashboard",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

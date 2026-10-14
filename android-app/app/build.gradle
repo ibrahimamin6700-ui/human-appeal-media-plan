@@ -2,6 +2,12 @@ plugins {
     id 'com.android.application'
 }
 
+def githubRun = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+def keystoreFile = System.getenv('ANDROID_KEYSTORE_FILE')
+def keystorePassword = System.getenv('ANDROID_KEYSTORE_PASSWORD')
+def keyAliasValue = System.getenv('ANDROID_KEY_ALIAS')
+def keyPasswordValue = System.getenv('ANDROID_KEY_PASSWORD')
+
 android {
     namespace 'com.humanappeal.mediaplan'
     compileSdk 35
@@ -10,13 +16,25 @@ android {
         applicationId 'com.humanappeal.mediaplan'
         minSdk 24
         targetSdk 35
-        versionCode (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
-        versionName "1.0.${System.getenv('GITHUB_RUN_NUMBER') ?: '0'}"
+        versionCode githubRun
+        versionName "1.0.${githubRun}"
+    }
+
+    signingConfigs {
+        release {
+            if (keystoreFile && keystorePassword && keyAliasValue && keyPasswordValue) {
+                storeFile file(keystoreFile)
+                storePassword keystorePassword
+                keyAlias keyAliasValue
+                keyPassword keyPasswordValue
+            }
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
+            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

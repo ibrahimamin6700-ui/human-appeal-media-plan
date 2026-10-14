@@ -4,12 +4,12 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.JobInfo;
-import android.app.JobScheduler;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.job.JobInfo;
+import android.app.job.JobScheduler;
 import android.content.ClipData;
 import android.content.ComponentName;
 import android.content.Context;
@@ -72,6 +72,7 @@ public class MainActivity extends Activity {
     private ProgressBar loadProgress;
     private View splashView;
     private boolean dashboardReady = false;
+    private boolean openingDirectContent = false;
 
     @Override
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
@@ -91,15 +92,12 @@ public class MainActivity extends Activity {
         webView.setVerticalScrollBarEnabled(false);
         root.addView(webView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-        ));
+                FrameLayout.LayoutParams.MATCH_PARENT));
 
         splashView = buildSplashView();
         root.addView(splashView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-        ));
-
+                FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
 
         WebSettings settings = webView.getSettings();
@@ -114,34 +112,38 @@ public class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(false);
 
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidShare");
-
         webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onProgressChanged(WebView view, int newProgress) {
-                if (loadProgress != null) loadProgress.setProgress(Math.max(6, newProgress));
+            @Override public void onProgressChanged(WebView view, int progress) {
+                if (loadProgress != null) loadProgress.setProgress(Math.max(6, progress));
             }
         });
 
         webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageFinished(WebView view, String url) {
+            @Override public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                expandAppsScriptContentToFullScreen();
-                mainHandler.postDelayed(MainActivity.this::expandAppsScriptContentToFullScreen, 350);
-                mainHandler.postDelayed(MainActivity.this::expandAppsScriptContentToFullScreen, 1100);
-                mainHandler.postDelayed(() -> { if (!dashboardReady) hideSplash(); }, 4500);
+                if (url != null && url.contains("script.google.com") && !openingDirectContent) {
+                    view.evaluateJavascript("(function(){var f=document.querySelector('iframe');return f&&f.src?f.src:'';})()", result -> {
+                        String direct = decodeJsString(result);
+                        if (direct.startsWith("https://") && !direct.equals(url)) {
+                            openingDirectContent = true;
+                            view.loadUrl(direct);
+                            return;
+                        }
+                        hideGoogleHostUi();
+                        scheduleSplashFallback();
+                    });
+                } else {
+                    hideGoogleHostUi();
+                    scheduleSplashFallback();
+                }
             }
 
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 String host = uri.getHost() == null ? "" : uri.getHost();
                 if (host.endsWith("google.com") || host.endsWith("googleusercontent.com")) return false;
-                try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, uri));
-                } catch (Exception e) {
-                    Toast.makeText(MainActivity.this, "Unable to open this link", Toast.LENGTH_SHORT).show();
-                }
+                try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); }
+                catch (Exception e) { Toast.makeText(MainActivity.this, "Unable to open this link", Toast.LENGTH_SHORT).show(); }
                 return true;
             }
         });
@@ -155,6 +157,17 @@ public class MainActivity extends Activity {
         }
     }
 
+    private String decodeJsString(String value) {
+        if (value == null || "null".equals(value)) return "";
+        String out = value;
+        if (out.startsWith("\"") && out.endsWith("\"") && out.length() >= 2) out = out.substring(1, out.length() - 1);
+        return out.replace("\\u003d", "=").replace("\\u0026", "&").replace("\\/", "/").replace("\\\"", "\"");
+    }
+
+    private void scheduleSplashFallback() {
+        mainHandler.postDelayed(() -> { if (!dashboardReady) hideSplash(); }, 4500);
+    }
+
     private View buildSplashView() {
         LinearLayout splash = new LinearLayout(this);
         splash.setOrientation(LinearLayout.VERTICAL);
@@ -165,7 +178,7 @@ public class MainActivity extends Activity {
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.ic_launcher);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(112), dp(112));
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(116), dp(116));
         logoParams.bottomMargin = dp(22);
         splash.addView(logo, logoParams);
 
@@ -215,21 +228,18 @@ public class MainActivity extends Activity {
         splashView.animate().alpha(0f).setDuration(260).withEndAction(() -> splashView.setVisibility(View.GONE)).start();
     }
 
-    private void expandAppsScriptContentToFullScreen() {
+    private void hideGoogleHostUi() {
         if (webView == null) return;
         String js = "(function(){try{" +
                 "document.documentElement.style.margin='0';document.documentElement.style.padding='0';" +
                 "document.body.style.margin='0';document.body.style.padding='0';" +
-                "var f=document.querySelector('iframe');" +
-                "if(f&&location.hostname.indexOf('script.google.com')>=0){" +
+                "var f=document.querySelector('iframe');if(f&&location.hostname.indexOf('script.google.com')>=0){" +
                 "f.style.setProperty('position','fixed','important');f.style.setProperty('inset','0','important');" +
                 "f.style.setProperty('width','100vw','important');f.style.setProperty('height','100vh','important');" +
-                "f.style.setProperty('border','0','important');f.style.setProperty('z-index','2147483647','important');" +
-                "document.body.style.setProperty('overflow','hidden','important');}" +
-                "var n=['الإبلاغ عن إساءة استخدام','مزيد من المعلومات','Report abuse','More info'];" +
-                "var a=[].slice.call(document.querySelectorAll('div,header,section'));" +
-                "var m=a.filter(function(e){var t=(e.innerText||'');var r=e.getBoundingClientRect();return r.top<180&&r.height>20&&r.height<190&&((t.indexOf(n[0])>=0&&t.indexOf(n[1])>=0)||(t.indexOf(n[2])>=0&&t.indexOf(n[3])>=0));});" +
-                "m.sort(function(x,y){var a=x.getBoundingClientRect(),b=y.getBoundingClientRect();return a.width*a.height-b.width*b.height;});if(m[0])m[0].style.setProperty('display','none','important');" +
+                "f.style.setProperty('border','0','important');f.style.setProperty('z-index','2147483647','important');}" +
+                "var terms=['الإبلاغ عن إساءة استخدام','مزيد من المعلومات','Report abuse','More info'];" +
+                "[].slice.call(document.querySelectorAll('div,header,section')).forEach(function(e){var t=e.innerText||'';var r=e.getBoundingClientRect();" +
+                "if(r.top<180&&r.height<190&&((t.indexOf(terms[0])>=0&&t.indexOf(terms[1])>=0)||(t.indexOf(terms[2])>=0&&t.indexOf(terms[3])>=0)))e.style.setProperty('display','none','important');});" +
                 "}catch(e){}})();";
         webView.evaluateJavascript(js, null);
     }
@@ -237,18 +247,20 @@ public class MainActivity extends Activity {
     private void enableImmersiveMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(false);
-            WindowInsetsController controller = getWindow().getInsetsController();
-            if (controller != null) {
-                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            WindowInsetsController c = getWindow().getInsetsController();
+            if (c != null) {
+                c.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             }
         } else {
-            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN |
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         }
     }
 
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) enableImmersiveMode();
     }
@@ -302,8 +314,7 @@ public class MainActivity extends Activity {
                 prefs.edit().putString(KEY_LAST_DAY, date).apply();
                 showNewDayNotification(context, day, spend, conv, value);
             }
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
     }
 
     private static void showNewDayNotification(Context context, int day, double spend, double conv, double value) {
@@ -314,7 +325,8 @@ public class MainActivity extends Activity {
         PendingIntent pi = PendingIntent.getActivity(context, 1201, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         String body = "أرقام يوم " + day + " اتضافت • Spend £" + format0(spend) + " • Conv " + format0(conv) + " • Value £" + format0(value);
         Notification.Builder b = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? new Notification.Builder(context, CHANNEL_ID) : new Notification.Builder(context);
-        b.setSmallIcon(R.drawable.ic_launcher).setContentTitle("Media Plan USA").setContentText(body).setStyle(new Notification.BigTextStyle().bigText(body)).setContentIntent(pi).setAutoCancel(true);
+        b.setSmallIcon(R.drawable.ic_launcher).setContentTitle("Media Plan USA").setContentText(body)
+                .setStyle(new Notification.BigTextStyle().bigText(body)).setContentIntent(pi).setAutoCancel(true);
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null) nm.notify(NOTIFICATION_ID, b.build());
     }
@@ -325,8 +337,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void dashboardReady() { runOnUiThread(MainActivity.this::hideSplash); }
         @JavascriptInterface public void onDashboardData(String json) { new Thread(() -> processDashboardUpdate(getApplicationContext(), json)).start(); }
 
-        @JavascriptInterface
-        public void shareImage(String dataUrl, String summary, String filename) {
+        @JavascriptInterface public void shareImage(String dataUrl, String summary, String filename) {
             new Thread(() -> {
                 try {
                     int comma = dataUrl.indexOf(',');
@@ -340,8 +351,7 @@ public class MainActivity extends Activity {
             }).start();
         }
 
-        @JavascriptInterface
-        public void shareCurrentScreen(String summary, String filename) {
+        @JavascriptInterface public void shareCurrentScreen(String summary, String filename) {
             runOnUiThread(() -> {
                 try {
                     int w = Math.max(webView.getWidth(), 1), h = Math.max(webView.getHeight(), 1);
@@ -434,7 +444,8 @@ public class MainActivity extends Activity {
 
     private void showUpdateDialog(String version, String apkUrl) {
         if (isFinishing()) return;
-        new AlertDialog.Builder(this).setTitle("Update available").setMessage("Human Appeal Media Plan " + version + " is available on GitHub.")
+        new AlertDialog.Builder(this).setTitle("Update available")
+                .setMessage("Human Appeal Media Plan " + version + " is available on GitHub.")
                 .setNegativeButton("Later", null)
                 .setPositiveButton("Update", (dialog, which) -> {
                     try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl))); }
@@ -458,7 +469,10 @@ public class MainActivity extends Activity {
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 
-    @Override protected void onSaveInstanceState(Bundle outState) { webView.saveState(outState); super.onSaveInstanceState(outState); }
+    @Override protected void onSaveInstanceState(Bundle outState) {
+        webView.saveState(outState);
+        super.onSaveInstanceState(outState);
+    }
 
     @Override public void onBackPressed() {
         if (webView != null && webView.canGoBack()) webView.goBack();

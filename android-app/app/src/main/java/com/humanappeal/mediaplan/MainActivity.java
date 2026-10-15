@@ -12,13 +12,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.drawable.ClipDrawable;
-import android.graphics.drawable.Drawable;
-import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -38,7 +33,6 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -65,13 +59,18 @@ public class MainActivity extends Activity {
     private static final String LATEST_RELEASE_API = "https://api.github.com/repos/ibrahimamin6700-ui/human-appeal-media-plan/releases/latest";
     private static final String APK_ASSET_NAME = "Human-Appeal-Media-Plan.apk";
     private static final int LEGACY_SYNC_JOB_ID = 12026;
+    private static final int SPLASH_BACKGROUND = Color.rgb(254, 254, 254);
+    // Positions inside the SEKNA splash artwork, as fractions of its width/height.
+    private static final float SPLASH_WORDMARK_WIDTH = 0.46f;
+    private static final float SPLASH_BAR_TOP = 0.585f;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private FrameLayout rootView;
     private WebView webView;
-    private ProgressBar loadProgress;
+    private SeknaProgressBar loadProgress;
+    private TextView loadingText;
     private View splashView;
-    private View offlineView;
+    private SeknaOfflineView offlineView;
     private boolean dashboardReady = false;
     private boolean mainFrameLoadFailed = false;
     private boolean servicesInitialized = false;
@@ -138,7 +137,7 @@ public class MainActivity extends Activity {
             public void onProgressChanged(WebView view, int progress) {
                 if (loadProgress != null && splashView != null && splashView.getVisibility() == View.VISIBLE) {
                     int shown = Math.max(7, Math.min(progress, 96));
-                    loadProgress.setProgress(shown, true);
+                    loadProgress.setProgress(shown);
                 }
             }
         });
@@ -215,108 +214,88 @@ public class MainActivity extends Activity {
 
     private View buildSplashView() {
         FrameLayout splash = new FrameLayout(this);
-        splash.setBackgroundColor(Color.rgb(250, 248, 253));
+        splash.setBackgroundColor(SPLASH_BACKGROUND);
 
         ImageView image = new ImageView(this);
-        Bitmap splashBitmap = loadBase64Bitmap(
-                R.raw.human_appeal_splash_b64,
-                R.raw.human_appeal_splash_b64_2,
-                R.raw.human_appeal_splash_b64_3,
-                R.raw.human_appeal_splash_b64_4,
-                R.raw.human_appeal_splash_b64_5,
-                R.raw.human_appeal_splash_b64_6,
-                R.raw.human_appeal_splash_b64_7,
-                R.raw.human_appeal_splash_b64_8);
-        if (splashBitmap != null) {
-            image.setImageBitmap(splashBitmap);
-        } else {
-            image.setImageResource(R.drawable.ic_launcher);
-        }
-        image.setBackgroundColor(Color.rgb(250, 248, 253));
-        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        image.setImageResource(R.drawable.sekna_splash);
+        image.setBackgroundColor(SPLASH_BACKGROUND);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         splash.addView(image, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
 
-        loadProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        loadProgress.setMax(100);
+        loadProgress = new SeknaProgressBar(this);
         loadProgress.setProgress(7);
-        loadProgress.setIndeterminate(false);
-        loadProgress.setProgressDrawable(buildGlossyProgressDrawable());
-        loadProgress.setElevation(dp(9));
-
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(270), dp(17));
-        progressParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        progressParams.bottomMargin = dp(170);
+        loadProgress.setElevation(dp(6));
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(220), dp(12));
+        progressParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         splash.addView(loadProgress, progressParams);
 
-        TextView loadingText = new TextView(this);
-        loadingText.setText("Loading Media Plan...");
-        loadingText.setTextSize(12);
-        loadingText.setTextColor(Color.rgb(103, 68, 135));
+        loadingText = new TextView(this);
+        loadingText.setText("Loading   ");
+        loadingText.setTextSize(13);
+        loadingText.setLetterSpacing(0.08f);
+        loadingText.setTextColor(SeknaProgressBar.NAVY);
         loadingText.setGravity(Gravity.CENTER);
-        loadingText.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        loadingText.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD));
         FrameLayout.LayoutParams textParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT);
-        textParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        textParams.bottomMargin = dp(138);
+        textParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         splash.addView(loadingText, textParams);
 
-        splash.post(() -> {
-            if (loadProgress == null || splash.getHeight() <= 0) return;
-            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) loadProgress.getLayoutParams();
-            int desired = Math.round(splash.getHeight() * 0.22f);
-            int progressBottom = Math.max(dp(135), Math.min(desired, dp(230)));
-            params.bottomMargin = progressBottom;
-            loadProgress.setLayoutParams(params);
+        // Entrance: artwork fades in with a gentle zoom, then the bar and label rise in.
+        image.setAlpha(0f);
+        image.setScaleX(1.06f);
+        image.setScaleY(1.06f);
+        image.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(750)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+        for (View v : new View[]{loadProgress, loadingText}) {
+            v.setAlpha(0f);
+            v.setTranslationY(dp(12));
+            v.animate().alpha(1f).translationY(0f).setStartDelay(350).setDuration(500).start();
+        }
 
-            FrameLayout.LayoutParams labelParams =
-                    (FrameLayout.LayoutParams) loadingText.getLayoutParams();
-            labelParams.bottomMargin = Math.max(dp(104), progressBottom - dp(32));
-            loadingText.setLayoutParams(labelParams);
+        // Place the bar just under the tagline, matching the SEKNA wordmark width.
+        splash.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            int width = r - l;
+            int height = b - t;
+            if (width <= 0 || height <= 0 || image.getDrawable() == null) return;
+            float iw = image.getDrawable().getIntrinsicWidth();
+            float ih = image.getDrawable().getIntrinsicHeight();
+            if (iw <= 0 || ih <= 0) return;
+            float scale = Math.max(width / iw, height / ih);
+            int barWidth = Math.round(SPLASH_WORDMARK_WIDTH * iw * scale);
+            barWidth = Math.max(dp(180), Math.min(barWidth, Math.min(dp(300), width - dp(48))));
+            int barTop = Math.round((SPLASH_BAR_TOP - 0.5f) * ih * scale + height / 2f);
+
+            FrameLayout.LayoutParams bar = (FrameLayout.LayoutParams) loadProgress.getLayoutParams();
+            FrameLayout.LayoutParams label = (FrameLayout.LayoutParams) loadingText.getLayoutParams();
+            if (bar.width == barWidth && bar.topMargin == barTop) return;
+            bar.width = barWidth;
+            bar.topMargin = barTop;
+            label.topMargin = barTop + bar.height + dp(12);
+            splash.post(() -> {
+                loadProgress.setLayoutParams(bar);
+                loadingText.setLayoutParams(label);
+            });
         });
 
+        mainHandler.post(loadingDots);
         return splash;
     }
 
-    private Drawable buildGlossyProgressDrawable() {
-        GradientDrawable track = new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.rgb(255, 255, 255), Color.rgb(239, 231, 249)});
-        track.setCornerRadius(dp(20));
-        track.setStroke(dp(1), Color.argb(110, 111, 45, 189));
+    private final Runnable loadingDots = new Runnable() {
+        private int dots = 0;
 
-        GradientDrawable fill = new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.rgb(173, 108, 238), Color.rgb(111, 45, 189), Color.rgb(89, 27, 164)});
-        fill.setCornerRadius(dp(20));
-        fill.setStroke(dp(1), Color.argb(145, 255, 255, 255));
-
-        ClipDrawable clippedFill = new ClipDrawable(fill, Gravity.LEFT, ClipDrawable.HORIZONTAL);
-        LayerDrawable layers = new LayerDrawable(new Drawable[]{track, clippedFill});
-        layers.setId(0, android.R.id.background);
-        layers.setId(1, android.R.id.progress);
-        return layers;
-    }
-
-    private Bitmap loadBase64Bitmap(int... rawResourceIds) {
-        try {
-            StringBuilder encoded = new StringBuilder();
-            for (int rawResourceId : rawResourceIds) {
-                try (InputStream input = getResources().openRawResource(rawResourceId);
-                     BufferedReader reader = new BufferedReader(
-                             new InputStreamReader(input, StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) encoded.append(line.trim());
-                }
-            }
-            byte[] bytes = Base64.decode(encoded.toString(), Base64.DEFAULT);
-            return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-        } catch (Throwable ignored) {
-            return null;
+        @Override
+        public void run() {
+            if (loadingText == null || splashView == null || splashView.getVisibility() != View.VISIBLE) return;
+            dots = (dots + 1) % 4;
+            loadingText.setText("Loading" + "...".substring(0, dots) + "   ".substring(dots));
+            mainHandler.postDelayed(this, 420);
         }
-    }
+    };
 
     private void hideSplash() {
         if (dashboardReady && (splashView == null || splashView.getVisibility() != View.VISIBLE)) return;
@@ -328,7 +307,7 @@ public class MainActivity extends Activity {
         }
 
         dashboardReady = true;
-        if (loadProgress != null) loadProgress.setProgress(100, true);
+        if (loadProgress != null) loadProgress.setProgress(100);
 
         if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
             splashView.animate()
@@ -357,91 +336,28 @@ public class MainActivity extends Activity {
             if (webView != null) webView.setVisibility(View.INVISIBLE);
 
             if (offlineView == null) {
-                offlineView = buildOfflineView();
+                offlineView = new SeknaOfflineView(this, this::retryDashboard);
+                offlineView.setVisibility(View.GONE);
                 rootView.addView(offlineView, new FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
             }
-            offlineView.setVisibility(View.VISIBLE);
-            offlineView.setAlpha(1f);
+            if (offlineView.getVisibility() == View.VISIBLE) {
+                offlineView.retryFailed();
+            } else {
+                offlineView.setVisibility(View.VISIBLE);
+                offlineView.setAlpha(1f);
+                offlineView.show();
+            }
             offlineView.bringToFront();
         });
     }
 
     private void hideOfflineScreen() {
-        if (offlineView != null) offlineView.setVisibility(View.GONE);
-    }
-
-    private View buildOfflineView() {
-        LinearLayout screen = new LinearLayout(this);
-        screen.setOrientation(LinearLayout.VERTICAL);
-        screen.setGravity(Gravity.CENTER);
-        screen.setPadding(dp(28), dp(36), dp(28), dp(36));
-        screen.setBackgroundColor(Color.rgb(248, 245, 252));
-
-        ImageView logo = new ImageView(this);
-        Bitmap logoBitmap = loadBase64Bitmap(R.raw.human_appeal_logo_b64);
-        if (logoBitmap != null) logo.setImageBitmap(logoBitmap);
-        else logo.setImageResource(R.drawable.ic_launcher);
-        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(150), dp(82));
-        logoParams.bottomMargin = dp(30);
-        screen.addView(logo, logoParams);
-
-        TextView icon = new TextView(this);
-        icon.setText("!");
-        icon.setTextSize(30);
-        icon.setTextColor(Color.WHITE);
-        icon.setGravity(Gravity.CENTER);
-        icon.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        GradientDrawable iconBg = new GradientDrawable();
-        iconBg.setShape(GradientDrawable.OVAL);
-        iconBg.setColor(Color.rgb(111, 45, 189));
-        icon.setBackground(iconBg);
-        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(66), dp(66));
-        iconParams.bottomMargin = dp(24);
-        screen.addView(icon, iconParams);
-
-        TextView title = new TextView(this);
-        title.setText("No Internet Connection");
-        title.setTextSize(23);
-        title.setTextColor(Color.rgb(34, 30, 42));
-        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        title.setGravity(Gravity.CENTER);
-        screen.addView(title);
-
-        TextView message = new TextView(this);
-        message.setText("Check your connection and try again.\nتحقق من اتصال الإنترنت ثم حاول مرة أخرى.");
-        message.setTextSize(14);
-        message.setTextColor(Color.rgb(115, 106, 126));
-        message.setGravity(Gravity.CENTER);
-        message.setLineSpacing(dp(3), 1f);
-        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        messageParams.topMargin = dp(12);
-        messageParams.bottomMargin = dp(30);
-        screen.addView(message, messageParams);
-
-        TextView retry = new TextView(this);
-        retry.setText("Retry");
-        retry.setTextSize(15);
-        retry.setTextColor(Color.WHITE);
-        retry.setGravity(Gravity.CENTER);
-        retry.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        retry.setPadding(dp(42), dp(13), dp(42), dp(13));
-        GradientDrawable retryBg = new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.rgb(98, 39, 176), Color.rgb(139, 73, 204)});
-        retryBg.setCornerRadius(dp(24));
-        retry.setBackground(retryBg);
-        retry.setElevation(dp(5));
-        retry.setOnClickListener(v -> retryDashboard());
-        screen.addView(retry, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        return screen;
+        if (offlineView != null) {
+            offlineView.hide();
+            offlineView.setVisibility(View.GONE);
+        }
     }
 
     private void retryDashboard() {
@@ -481,7 +397,7 @@ public class MainActivity extends Activity {
         box.setBackgroundColor(Color.WHITE);
 
         TextView title = new TextView(this);
-        title.setText("Human Appeal Media Plan");
+        title.setText("SEKNA");
         title.setTextSize(22);
         title.setTextColor(Color.rgb(34, 40, 50));
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -770,7 +686,7 @@ public class MainActivity extends Activity {
         if (isFinishing()) return;
         new AlertDialog.Builder(this)
                 .setTitle("Update available")
-                .setMessage("Human Appeal Media Plan " + version + " is available on GitHub.")
+                .setMessage("SEKNA " + version + " is available.")
                 .setNegativeButton("Later", null)
                 .setPositiveButton("Update", (dialog, which) -> {
                     try {

@@ -2,4 +2,7 @@
     <color name="ha_purple">#5B2C83</color>
     <color name="ha_purple_dark">#3E1E59</color>
     <color name="white">#FFFFFF</color>
+    <color name="sekna_navy">#203C8E</color>
+    <color name="sekna_gold">#C28D3E</color>
+    <color name="sekna_icon_background">#0541B0</color>
 </resources>

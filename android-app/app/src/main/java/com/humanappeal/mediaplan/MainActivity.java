@@ -466,10 +466,17 @@ public class MainActivity extends Activity {
         // Legacy polling intentionally disabled. Firebase is the single notification source.
     }
 
+    /**
+     * Matches the phone's status and navigation bars to the dashboard theme:
+     * white bars with dark icons in light mode, near-black bars in dark mode.
+     * Android 7 cannot draw dark navigation icons, so it keeps a black nav bar.
+     */
     private void applySystemBars(boolean dark) {
         try {
-            getWindow().setStatusBarColor(Color.BLACK);
-            getWindow().setNavigationBarColor(Color.BLACK);
+            boolean lightNavIcons = !dark && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
+            getWindow().setStatusBarColor(dark ? Color.rgb(11, 13, 17) : Color.WHITE);
+            getWindow().setNavigationBarColor(dark ? Color.rgb(5, 6, 8)
+                    : lightNavIcons ? Color.rgb(245, 246, 248) : Color.BLACK);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 getWindow().setDecorFitsSystemWindows(true);
@@ -477,10 +484,13 @@ public class MainActivity extends Activity {
                 if (controller != null) {
                     int mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS |
                             WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
-                    controller.setSystemBarsAppearance(0, mask);
+                    controller.setSystemBarsAppearance(dark ? 0 : mask, mask);
                 }
             } else {
-                getWindow().getDecorView().setSystemUiVisibility(0);
+                int flags = 0;
+                if (!dark) flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                if (lightNavIcons) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                getWindow().getDecorView().setSystemUiVisibility(flags);
             }
         } catch (Throwable ignored) {}
     }

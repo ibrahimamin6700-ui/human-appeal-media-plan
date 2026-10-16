@@ -88,7 +88,8 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
                     ? new Notification.Builder(this, MainActivity.CHANNEL_ID)
                     : new Notification.Builder(this);
 
-            builder.setSmallIcon(R.drawable.ic_launcher)
+            builder.setSmallIcon(R.drawable.ic_stat_humanappeal)
+                    .setColor(android.graphics.Color.rgb(111, 45, 189))
                     .setContentTitle(title)
                     .setContentText(body)
                     .setStyle(new Notification.BigTextStyle().bigText(body))

@@ -24,6 +24,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsetsController;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -59,6 +60,7 @@ public class MainActivity extends Activity {
     private static final String LATEST_RELEASE_API = "https://api.github.com/repos/ibrahimamin6700-ui/human-appeal-media-plan/releases/latest";
     private static final String APK_ASSET_NAME = "Human-Appeal-Media-Plan.apk";
     private static final int LEGACY_SYNC_JOB_ID = 12026;
+    private static final int FILE_CHOOSER_REQUEST = 1301;
     private static final int SPLASH_BACKGROUND = Color.rgb(254, 254, 254);
     // Positions inside the SEKNA splash artwork, as fractions of its width/height.
     private static final float SPLASH_WORDMARK_WIDTH = 0.46f;
@@ -76,6 +78,7 @@ public class MainActivity extends Activity {
     private boolean servicesInitialized = false;
     private long splashStartedAt = 0L;
     private String pendingOpenAccount = null;
+    private ValueCallback<Uri[]> filePathCallback;
 
     @Override
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
@@ -126,10 +129,6 @@ public class MainActivity extends Activity {
         settings.setTextZoom(100);
         settings.setMediaPlaybackRequiresUserGesture(false);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-        }
-
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidShare");
 
         webView.setWebChromeClient(new WebChromeClient() {
@@ -139,6 +138,21 @@ public class MainActivity extends Activity {
                     int shown = Math.max(7, Math.min(progress, 96));
                     loadProgress.setProgress(shown);
                 }
+            }
+
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                                             FileChooserParams params) {
+                if (filePathCallback != null) filePathCallback.onReceiveValue(null);
+                filePathCallback = callback;
+                try {
+                    startActivityForResult(params.createIntent(), FILE_CHOOSER_REQUEST);
+                } catch (Exception e) {
+                    filePathCallback = null;
+                    Toast.makeText(MainActivity.this, "Unable to open photos", Toast.LENGTH_SHORT).show();
+                    return false;
+                }
+                return true;
             }
         });
 
@@ -209,7 +223,7 @@ public class MainActivity extends Activity {
             }
         }
 
-        mainHandler.postDelayed(this::checkForGitHubUpdate, 6500);
+        mainHandler.postDelayed(() -> checkForGitHubUpdate(false), 6500);
     }
 
     private View buildSplashView() {
@@ -572,6 +586,16 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String getAppVersion() {
+            return BuildConfig.VERSION_NAME;
+        }
+
+        @JavascriptInterface
+        public void checkForAppUpdate() {
+            checkForGitHubUpdate(true);
+        }
+
+        @JavascriptInterface
         public void shareCurrentScreen(String summary, String filename) {
             runOnUiThread(() -> {
                 try {
@@ -649,8 +673,14 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void checkForGitHubUpdate() {
+    /**
+     * Checks GitHub Releases for a newer signed APK. When the dashboard asks
+     * (manual = true) the result is also sent back to the page.
+     */
+    private void checkForGitHubUpdate(boolean manual) {
         new Thread(() -> {
+            String result = "error";
+            String latestShown = "";
             HttpURLConnection connection = null;
             try {
                 URL url = new URL(LATEST_RELEASE_API);
@@ -659,7 +689,9 @@ public class MainActivity extends Activity {
                 connection.setReadTimeout(7000);
                 connection.setRequestProperty("Accept", "application/vnd.github+json");
                 connection.setRequestProperty("User-Agent", "Human-Appeal-Media-Plan-Android");
-                if (connection.getResponseCode() != 200) return;
+                int code = connection.getResponseCode();
+                if (code == 404) result = "latest"; // no official release published yet
+                if (code != 200) return;
 
                 BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
                 StringBuilder text = new StringBuilder();
@@ -681,15 +713,34 @@ public class MainActivity extends Activity {
                         }
                     }
                 }
+                latestShown = latestTag;
                 if (apkUrl != null && isNewerVersion(latestTag, currentVersion)) {
+                    result = "available";
                     String finalUrl = apkUrl;
                     runOnUiThread(() -> showUpdateDialog(latestTag, finalUrl));
+                } else {
+                    result = "latest";
                 }
             } catch (Exception ignored) {
             } finally {
                 if (connection != null) connection.disconnect();
+                if (manual) reportUpdateResult(result, latestShown);
             }
         }, "ha-update-check").start();
+    }
+
+    private void reportUpdateResult(String status, String latest) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("status", status);
+            payload.put("latest", latest);
+            payload.put("current", BuildConfig.VERSION_NAME);
+            String js = "(function(){try{if(window.onSeknaAppUpdate)window.onSeknaAppUpdate(" + payload + ");}catch(e){}})();";
+            runOnUiThread(() -> {
+                if (webView != null) webView.evaluateJavascript(js, null);
+            });
+        } catch (Exception ignored) {
+        }
     }
 
     private void showUpdateDialog(String version, String apkUrl) {
@@ -724,6 +775,18 @@ public class MainActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == FILE_CHOOSER_REQUEST) {
+            if (filePathCallback != null) {
+                filePathCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+                filePathCallback = null;
+            }
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override

@@ -59,7 +59,7 @@ public class SeknaOfflineView extends FrameLayout {
         logo.setImageResource(R.drawable.sekna_logo);
         logo.setAdjustViewBounds(true);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(190), LinearLayout.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(160), LinearLayout.LayoutParams.WRAP_CONTENT);
         logoParams.bottomMargin = dp(34);
         content.addView(logo, logoParams);
 
@@ -86,7 +86,7 @@ public class SeknaOfflineView extends FrameLayout {
         content.addView(accent, accentParams);
 
         TextView message = new TextView(context);
-        message.setText("Check your connection and try again.\nتحقق من اتصال الإنترنت ثم حاول مرة أخرى.");
+        message.setText("Check your connection and try again.");
         message.setTextSize(14);
         message.setTextColor(Color.rgb(98, 102, 120));
         message.setGravity(Gravity.CENTER);

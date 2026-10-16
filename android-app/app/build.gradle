@@ -5,6 +5,11 @@ plugins {
 
 // Dashboard UI is served live from the Apps Script deployment; this build syncs the Android wrapper with the current GitHub release flow.
 def githubRun = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+// Official releases pass APP_VERSION_NAME (e.g. 1.1.0); the code is MAJOR*1,000,000 + MINOR*1,000 + PATCH.
+def releaseVersion = System.getenv('APP_VERSION_NAME') ?: ''
+def releaseParts = releaseVersion ==~ /\d+\.\d+\.\d+/ ? releaseVersion.tokenize('.').collect { it.toInteger() } : null
+def appVersionCode = releaseParts ? releaseParts[0] * 1000000 + releaseParts[1] * 1000 + releaseParts[2] : githubRun
+def appVersionName = releaseParts ? releaseVersion : "1.0.${githubRun}"
 def keystoreFile = System.getenv('ANDROID_KEYSTORE_FILE')
 def keystorePassword = System.getenv('ANDROID_KEYSTORE_PASSWORD')
 def keyAliasValue = System.getenv('ANDROID_KEY_ALIAS')
@@ -22,8 +27,8 @@ android {
         applicationId 'com.humanappeal.mediaplan'
         minSdk 24
         targetSdk 35
-        versionCode githubRun
-        versionName "1.0.${githubRun}"
+        versionCode appVersionCode
+        versionName appVersionName
     }
 
     signingConfigs {
@@ -50,4 +55,5 @@ dependencies {
     implementation 'androidx.core:core:1.15.0'
     implementation platform('com.google.firebase:firebase-bom:33.16.0')
     implementation 'com.google.firebase:firebase-messaging'
+    implementation 'androidx.work:work-runtime:2.9.1'
 }

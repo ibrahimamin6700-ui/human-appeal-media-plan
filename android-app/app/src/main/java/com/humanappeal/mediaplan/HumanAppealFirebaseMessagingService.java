@@ -43,9 +43,12 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
         String title = "Media Plan";
         String body = "Media Plan data was updated.";
         String accountKey = "usa";
+        String eventType = "";
 
         Map<String, String> data = message.getData();
         if (data != null) {
+            String dataEvent = data.get("eventType");
+            if (dataEvent != null) eventType = dataEvent;
             String dataTitle = data.get("title");
             String dataBody = data.get("body");
             String dataAccount = data.get("accountKey");
@@ -61,6 +64,16 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
             if (message.getNotification().getBody() != null && !message.getNotification().getBody().isEmpty()) {
                 body = message.getNotification().getBody();
             }
+        }
+
+        // Team messages and new app versions come from SEKNA and use the SEKNA mark.
+        if ("announcement".equals(eventType)) {
+            SeknaNotifications.show(this, SeknaNotifications.ANNOUNCEMENT_ID, title, body, false);
+            return;
+        }
+        if ("app_update".equals(eventType)) {
+            SeknaNotifications.show(this, SeknaNotifications.APP_UPDATE_ID, title, body, true);
+            return;
         }
 
         showNotification(title, body, accountKey);

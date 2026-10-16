@@ -4,6 +4,7 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.KeyguardManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.job.JobScheduler;
@@ -14,9 +15,12 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.hardware.biometrics.BiometricManager;
+import android.hardware.biometrics.BiometricPrompt;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Base64;
@@ -58,7 +62,11 @@ public class MainActivity extends Activity {
     public static final String EXTRA_OPEN_ACCOUNT = "open_account";
 
     private static final String LATEST_RELEASE_API = "https://api.github.com/repos/ibrahimamin6700-ui/human-appeal-media-plan/releases/latest";
-    private static final String APK_ASSET_NAME = "Human-Appeal-Media-Plan.apk";
+    private static final String APK_ASSET_NAME = "SEKNA.apk";
+    private static final String LEGACY_APK_ASSET_NAME = "Human-Appeal-Media-Plan.apk";
+    private static final int UNLOCK_REQUEST = 1302;
+    // SEKNA locks again after this long in the background.
+    private static final long LOCK_AFTER_MS = 30_000L;
     private static final int LEGACY_SYNC_JOB_ID = 12026;
     private static final int FILE_CHOOSER_REQUEST = 1301;
     private static final int SPLASH_BACKGROUND = Color.rgb(254, 254, 254);
@@ -79,6 +87,12 @@ public class MainActivity extends Activity {
     private long splashStartedAt = 0L;
     private String pendingOpenAccount = null;
     private ValueCallback<Uri[]> filePathCallback;
+    private SeknaLockView lockView;
+    private boolean authInProgress = false;
+    private long backgroundedAt = 0L;
+    private Runnable authSuccess;
+    private Runnable authFailure;
+    private boolean updateDialogShown = false;
 
     @Override
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
@@ -101,7 +115,7 @@ public class MainActivity extends Activity {
         }
 
         webView.setVisibility(View.VISIBLE);
-        webView.setBackgroundColor(Color.WHITE);
+        webView.setBackgroundColor(HumanAppealApp.darkMode(this) ? Color.rgb(5, 6, 8) : Color.rgb(244, 246, 251));
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.setVerticalScrollBarEnabled(false);
         webView.setHorizontalScrollBarEnabled(false);
@@ -115,6 +129,10 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(rootView);
         splashStartedAt = System.currentTimeMillis();
+        if (HumanAppealApp.appLockEnabled(this)) {
+            showLock();
+            mainHandler.postDelayed(this::requestUnlock, 450);
+        }
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -223,7 +241,126 @@ public class MainActivity extends Activity {
             }
         }
 
-        mainHandler.postDelayed(() -> checkForGitHubUpdate(false), 6500);
+        boolean openedForUpdate = getIntent() != null
+                && getIntent().getBooleanExtra(SeknaNotifications.EXTRA_CHECK_UPDATE, false);
+        mainHandler.postDelayed(() -> checkForGitHubUpdate(false), openedForUpdate ? 2500 : 6500);
+    }
+
+    /* ---------- App lock (fingerprint, face or phone PIN) ---------- */
+
+    private void showLock() {
+        if (rootView == null) return;
+        if (lockView == null) {
+            lockView = new SeknaLockView(this, this::requestUnlock);
+            rootView.addView(lockView, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT));
+        }
+        lockView.setVisibility(View.VISIBLE);
+        lockView.bringToFront();
+    }
+
+    private void hideLock() {
+        if (lockView != null) lockView.setVisibility(View.GONE);
+    }
+
+    private boolean isLocked() {
+        return lockView != null && lockView.getVisibility() == View.VISIBLE;
+    }
+
+    private boolean deviceIsSecure() {
+        KeyguardManager keyguard = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        return keyguard != null && keyguard.isDeviceSecure();
+    }
+
+    private void requestUnlock() {
+        if (!isLocked() || authInProgress) return;
+        if (!deviceIsSecure()) {
+            // The phone no longer has a screen lock, so the app lock cannot work: turn it off.
+            HumanAppealApp.setAppLockEnabled(this, false);
+            hideLock();
+            return;
+        }
+        authenticate("Unlock SEKNA", this::hideLock, null);
+    }
+
+    /** Asks for the fingerprint / face, with the phone PIN, pattern or password as a fallback. */
+    private void authenticate(String title, Runnable onSuccess, Runnable onFailure) {
+        authSuccess = onSuccess;
+        authFailure = onFailure;
+        authInProgress = true;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                BiometricPrompt.Builder builder = new BiometricPrompt.Builder(this)
+                        .setTitle(title)
+                        .setSubtitle("Use your fingerprint, face or phone PIN");
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    builder.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK
+                            | BiometricManager.Authenticators.DEVICE_CREDENTIAL);
+                } else {
+                    builder.setDeviceCredentialAllowed(true);
+                }
+                builder.build().authenticate(new CancellationSignal(), getMainExecutor(),
+                        new BiometricPrompt.AuthenticationCallback() {
+                            @Override
+                            public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                                finishAuth(true);
+                            }
+
+                            @Override
+                            public void onAuthenticationError(int errorCode, CharSequence errString) {
+                                finishAuth(false);
+                            }
+                        });
+            } else {
+                KeyguardManager keyguard = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+                Intent intent = keyguard == null ? null
+                        : keyguard.createConfirmDeviceCredentialIntent(title, "Use your phone PIN, pattern or password");
+                if (intent == null) {
+                    finishAuth(true);
+                } else {
+                    startActivityForResult(intent, UNLOCK_REQUEST);
+                }
+            }
+        } catch (Throwable error) {
+            finishAuth(false);
+        }
+    }
+
+    private void finishAuth(boolean success) {
+        authInProgress = false;
+        backgroundedAt = 0L;
+        Runnable next = success ? authSuccess : authFailure;
+        authSuccess = null;
+        authFailure = null;
+        if (next != null) runOnUiThread(next);
+    }
+
+    private void reportAppLock(boolean enabled, String message) {
+        try {
+            String js = "(function(){try{if(window.onSeknaAppLock)window.onSeknaAppLock(" + enabled + ","
+                    + (message == null ? "null" : JSONObject.quote(message)) + ");}catch(e){}})();";
+            runOnUiThread(() -> {
+                if (webView != null) webView.evaluateJavascript(js, null);
+            });
+        } catch (Throwable ignored) {}
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (backgroundedAt > 0 && !authInProgress && HumanAppealApp.appLockEnabled(this)
+                && System.currentTimeMillis() - backgroundedAt >= LOCK_AFTER_MS) {
+            showLock();
+            mainHandler.postDelayed(this::requestUnlock, 250);
+        }
+        backgroundedAt = 0L;
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (!authInProgress && !isChangingConfigurations()) backgroundedAt = System.currentTimeMillis();
     }
 
     private View buildSplashView() {
@@ -586,6 +723,42 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean isAppLockEnabled() {
+            return HumanAppealApp.appLockEnabled(getApplicationContext());
+        }
+
+        /** Turning the lock on or off always needs the fingerprint / PIN first. */
+        @JavascriptInterface
+        public void setAppLockEnabled(boolean enabled) {
+            runOnUiThread(() -> {
+                boolean current = HumanAppealApp.appLockEnabled(MainActivity.this);
+                if (enabled && !deviceIsSecure()) {
+                    reportAppLock(false, "Set a screen lock (PIN, pattern or fingerprint) on your phone first.");
+                    return;
+                }
+                if (!enabled && !deviceIsSecure()) {
+                    HumanAppealApp.setAppLockEnabled(MainActivity.this, false);
+                    reportAppLock(false, "App lock is off");
+                    return;
+                }
+                authenticate(enabled ? "Turn on app lock" : "Turn off app lock", () -> {
+                    HumanAppealApp.setAppLockEnabled(MainActivity.this, enabled);
+                    reportAppLock(enabled, enabled ? "App lock is on" : "App lock is off");
+                }, () -> reportAppLock(current, null));
+            });
+        }
+
+        @JavascriptInterface
+        public void watchAccessApproval(String token) {
+            try { AccessApprovalWorker.start(getApplicationContext(), token); } catch (Throwable ignored) {}
+        }
+
+        @JavascriptInterface
+        public void stopAccessWatch() {
+            try { AccessApprovalWorker.stop(getApplicationContext()); } catch (Throwable ignored) {}
+        }
+
+        @JavascriptInterface
         public String getAppVersion() {
             return BuildConfig.VERSION_NAME;
         }
@@ -688,7 +861,7 @@ public class MainActivity extends Activity {
                 connection.setConnectTimeout(7000);
                 connection.setReadTimeout(7000);
                 connection.setRequestProperty("Accept", "application/vnd.github+json");
-                connection.setRequestProperty("User-Agent", "Human-Appeal-Media-Plan-Android");
+                connection.setRequestProperty("User-Agent", "SEKNA-Android");
                 int code = connection.getResponseCode();
                 if (code == 404) result = "latest"; // no official release published yet
                 if (code != 200) return;
@@ -707,7 +880,8 @@ public class MainActivity extends Activity {
                 if (assets != null) {
                     for (int i = 0; i < assets.length(); i++) {
                         JSONObject asset = assets.optJSONObject(i);
-                        if (asset != null && APK_ASSET_NAME.equals(asset.optString("name"))) {
+                        String assetName = asset == null ? "" : asset.optString("name");
+                        if (APK_ASSET_NAME.equals(assetName) || LEGACY_APK_ASSET_NAME.equals(assetName)) {
                             apkUrl = asset.optString("browser_download_url", null);
                             break;
                         }
@@ -744,7 +918,8 @@ public class MainActivity extends Activity {
     }
 
     private void showUpdateDialog(String version, String apkUrl) {
-        if (isFinishing()) return;
+        if (isFinishing() || updateDialogShown) return;
+        updateDialogShown = true;
         new AlertDialog.Builder(this)
                 .setTitle("Update available")
                 .setMessage("SEKNA " + version + " is available.")
@@ -755,7 +930,9 @@ public class MainActivity extends Activity {
                     } catch (Exception e) {
                         Toast.makeText(this, "Unable to open GitHub download", Toast.LENGTH_SHORT).show();
                     }
-                }).show();
+                })
+                .setOnDismissListener(dialog -> updateDialogShown = false)
+                .show();
     }
 
     private boolean isNewerVersion(String latest, String current) {
@@ -779,6 +956,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == UNLOCK_REQUEST) {
+            finishAuth(resultCode == RESULT_OK);
+            return;
+        }
         if (requestCode == FILE_CHOOSER_REQUEST) {
             if (filePathCallback != null) {
                 filePathCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
@@ -802,6 +983,9 @@ public class MainActivity extends Activity {
         pendingOpenAccount = normalizeAccount(
                 intent == null ? null : intent.getStringExtra(EXTRA_OPEN_ACCOUNT));
         if (dashboardReady) mainHandler.postDelayed(this::applyPendingAccount, 150);
+        if (intent != null && intent.getBooleanExtra(SeknaNotifications.EXTRA_CHECK_UPDATE, false)) {
+            mainHandler.postDelayed(() -> checkForGitHubUpdate(false), 600);
+        }
     }
 
     @Override

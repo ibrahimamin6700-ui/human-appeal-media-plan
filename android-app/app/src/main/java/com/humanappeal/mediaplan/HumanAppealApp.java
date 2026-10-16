@@ -12,6 +12,7 @@ public class HumanAppealApp extends Application {
     public static final String KEY_NOTIFICATION_SOUND = "notification_sound";
     public static final String KEY_DARK_MODE = "dark_mode";
     public static final String KEY_LAST_ACCOUNT = "last_account";
+    public static final String KEY_APP_LOCK = "app_lock_enabled";
 
     @Override
     public void onCreate() {
@@ -32,6 +33,18 @@ public class HumanAppealApp extends Application {
     public static boolean darkMode(Context context) {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(KEY_DARK_MODE, false);
+    }
+
+    public static boolean appLockEnabled(Context context) {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_APP_LOCK, false);
+    }
+
+    public static void setAppLockEnabled(Context context, boolean enabled) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_APP_LOCK, enabled)
+                .apply();
     }
 
     public static void setNotificationsEnabled(Context context, boolean enabled) {

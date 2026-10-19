@@ -56,6 +56,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
+    // The app shows the SEKNA web app, so design changes reach the phone without an app update.
+    // DASHBOARD_URL stays the Apps Script address the background workers call for data.
+    public static final String WEB_APP_URL = "https://sekna-app.web.app/";
     public static final String DASHBOARD_URL = "https://script.google.com/macros/s/AKfycbzjgZ1nXxLTcFdeFCIEznOj2H0XCo9YGUeu1YF2pJdsQiOo_aM-Mn6HxKKNk8peEuM1Ig/exec";
     public static final String CHANNEL_ID = "media_plan_updates_v2";
     public static final String EXTRA_OPEN_ACCOUNT = "open_account";
@@ -205,7 +208,8 @@ public class MainActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 String host = uri.getHost() == null ? "" : uri.getHost();
-                if (host.endsWith("google.com") || host.endsWith("googleusercontent.com")) {
+                if (host.equals("sekna-app.web.app") || host.equals("sekna-app.firebaseapp.com")
+                        || host.endsWith("google.com") || host.endsWith("googleusercontent.com")) {
                     return false;
                 }
                 try {
@@ -219,13 +223,13 @@ public class MainActivity extends Activity {
 
         if (savedInstanceState == null) {
             mainFrameLoadFailed = false;
-            webView.loadUrl(DASHBOARD_URL);
+            webView.loadUrl(WEB_APP_URL);
         } else {
             try {
                 webView.restoreState(savedInstanceState);
             } catch (Throwable ignored) {
                 mainFrameLoadFailed = false;
-                webView.loadUrl(DASHBOARD_URL);
+                webView.loadUrl(WEB_APP_URL);
             }
         }
 
@@ -513,7 +517,7 @@ public class MainActivity extends Activity {
         try {
             mainFrameLoadFailed = false;
             webView.stopLoading();
-            webView.loadUrl(DASHBOARD_URL);
+            webView.loadUrl(WEB_APP_URL);
         } catch (Throwable ignored) {}
     }
 
@@ -567,7 +571,7 @@ public class MainActivity extends Activity {
 
     private void openDashboardExternally() {
         try {
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(DASHBOARD_URL)));
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(WEB_APP_URL)));
         } catch (Exception ignored) {
             Toast.makeText(this, "Unable to open dashboard", Toast.LENGTH_SHORT).show();
         }

@@ -36,7 +36,6 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -69,22 +68,20 @@ public class MainActivity extends Activity {
     private static final long LOCK_AFTER_MS = 30_000L;
     private static final int LEGACY_SYNC_JOB_ID = 12026;
     private static final int FILE_CHOOSER_REQUEST = 1301;
-    private static final int SPLASH_BACKGROUND = Color.rgb(254, 254, 254);
-    // Positions inside the SEKNA splash artwork, as fractions of its width/height.
-    private static final float SPLASH_WORDMARK_WIDTH = 0.46f;
-    private static final float SPLASH_BAR_TOP = 0.585f;
+    // The SEKNA splash now lives in the dashboard. Until its page draws, the app shows the
+    // same navy glow so there is no white flash, then hands over without a visible change.
+    private static final int SPLASH_CENTER = Color.rgb(44, 86, 214);
+    private static final int SPLASH_MID = Color.rgb(23, 51, 143);
+    private static final int SPLASH_EDGE = Color.rgb(10, 23, 72);
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private FrameLayout rootView;
     private WebView webView;
-    private SeknaProgressBar loadProgress;
-    private TextView loadingText;
     private View splashView;
     private SeknaOfflineView offlineView;
     private boolean dashboardReady = false;
     private boolean mainFrameLoadFailed = false;
     private boolean servicesInitialized = false;
-    private long splashStartedAt = 0L;
     private String pendingOpenAccount = null;
     private ValueCallback<Uri[]> filePathCallback;
     private SeknaLockView lockView;
@@ -128,7 +125,6 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(rootView);
-        splashStartedAt = System.currentTimeMillis();
         if (HumanAppealApp.appLockEnabled(this)) {
             showLock();
             mainHandler.postDelayed(this::requestUnlock, 450);
@@ -150,14 +146,6 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidShare");
 
         webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onProgressChanged(WebView view, int progress) {
-                if (loadProgress != null && splashView != null && splashView.getVisibility() == View.VISIBLE) {
-                    int shown = Math.max(7, Math.min(progress, 96));
-                    loadProgress.setProgress(shown);
-                }
-            }
-
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
                                              FileChooserParams params) {
@@ -365,105 +353,37 @@ public class MainActivity extends Activity {
 
     private View buildSplashView() {
         FrameLayout splash = new FrameLayout(this);
-        splash.setBackgroundColor(SPLASH_BACKGROUND);
-
-        ImageView image = new ImageView(this);
-        image.setImageResource(R.drawable.sekna_splash);
-        image.setBackgroundColor(SPLASH_BACKGROUND);
-        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        splash.addView(image, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-
-        loadProgress = new SeknaProgressBar(this);
-        loadProgress.setProgress(7);
-        loadProgress.setElevation(dp(6));
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(220), dp(12));
-        progressParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-        splash.addView(loadProgress, progressParams);
-
-        loadingText = new TextView(this);
-        loadingText.setText("Loading   ");
-        loadingText.setTextSize(13);
-        loadingText.setLetterSpacing(0.08f);
-        loadingText.setTextColor(SeknaProgressBar.NAVY);
-        loadingText.setGravity(Gravity.CENTER);
-        loadingText.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD));
-        FrameLayout.LayoutParams textParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT);
-        textParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-        splash.addView(loadingText, textParams);
-
-        // Entrance: artwork fades in with a gentle zoom, then the bar and label rise in.
-        image.setAlpha(0f);
-        image.setScaleX(1.06f);
-        image.setScaleY(1.06f);
-        image.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(750)
-                .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
-        for (View v : new View[]{loadProgress, loadingText}) {
-            v.setAlpha(0f);
-            v.setTranslationY(dp(12));
-            v.animate().alpha(1f).translationY(0f).setStartDelay(350).setDuration(500).start();
-        }
-
-        // Place the bar just under the tagline, matching the SEKNA wordmark width.
+        android.graphics.drawable.GradientDrawable glow = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{SPLASH_CENTER, SPLASH_MID, SPLASH_EDGE});
+        glow.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+        glow.setGradientCenter(0.5f, 0.46f);
+        glow.setGradientRadius(dp(420));
+        splash.setBackground(glow);
         splash.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            int width = r - l;
-            int height = b - t;
-            if (width <= 0 || height <= 0 || image.getDrawable() == null) return;
-            float iw = image.getDrawable().getIntrinsicWidth();
-            float ih = image.getDrawable().getIntrinsicHeight();
-            if (iw <= 0 || ih <= 0) return;
-            float scale = Math.max(width / iw, height / ih);
-            int barWidth = Math.round(SPLASH_WORDMARK_WIDTH * iw * scale);
-            barWidth = Math.max(dp(180), Math.min(barWidth, Math.min(dp(300), width - dp(48))));
-            int barTop = Math.round((SPLASH_BAR_TOP - 0.5f) * ih * scale + height / 2f);
-
-            FrameLayout.LayoutParams bar = (FrameLayout.LayoutParams) loadProgress.getLayoutParams();
-            FrameLayout.LayoutParams label = (FrameLayout.LayoutParams) loadingText.getLayoutParams();
-            if (bar.width == barWidth && bar.topMargin == barTop) return;
-            bar.width = barWidth;
-            bar.topMargin = barTop;
-            label.topMargin = barTop + bar.height + dp(12);
-            splash.post(() -> {
-                loadProgress.setLayoutParams(bar);
-                loadingText.setLayoutParams(label);
-            });
+            int size = Math.max(r - l, b - t);
+            if (size > 0) glow.setGradientRadius(size * 0.75f);
         });
-
-        mainHandler.post(loadingDots);
         return splash;
     }
 
-    private final Runnable loadingDots = new Runnable() {
-        private int dots = 0;
-
-        @Override
-        public void run() {
-            if (loadingText == null || splashView == null || splashView.getVisibility() != View.VISIBLE) return;
-            dots = (dots + 1) % 4;
-            loadingText.setText("Loading" + "...".substring(0, dots) + "   ".substring(dots));
-            mainHandler.postDelayed(this, 420);
+    // The dashboard's own splash is on screen: drop the native cover at once.
+    private void hideSplashCover() {
+        if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
+            splashView.animate().cancel();
+            splashView.setVisibility(View.GONE);
         }
-    };
+    }
 
     private void hideSplash() {
         if (dashboardReady && (splashView == null || splashView.getVisibility() != View.VISIBLE)) return;
 
-        long elapsed = System.currentTimeMillis() - splashStartedAt;
-        if (elapsed < 650) {
-            mainHandler.postDelayed(this::hideSplash, 650 - elapsed);
-            return;
-        }
-
         dashboardReady = true;
-        if (loadProgress != null) loadProgress.setProgress(100);
 
         if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
             splashView.animate()
                     .alpha(0f)
-                    .setDuration(380)
+                    .setDuration(220)
                     .withEndAction(() -> splashView.setVisibility(View.GONE))
                     .start();
         }
@@ -667,6 +587,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void dashboardReady() {
             runOnUiThread(MainActivity.this::hideSplash);
+        }
+
+        @JavascriptInterface
+        public void splashShown() {
+            runOnUiThread(MainActivity.this::hideSplashCover);
         }
 
         @JavascriptInterface

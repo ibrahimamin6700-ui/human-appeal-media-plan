@@ -10,5 +10,7 @@
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
         <item name="android:colorAccent">@color/ha_purple</item>
+        <item name="android:windowBackground">@color/sekna_splash_navy</item>
+        <item name="android:windowSplashScreenBackground">@color/sekna_splash_navy</item>
     </style>
 </resources>

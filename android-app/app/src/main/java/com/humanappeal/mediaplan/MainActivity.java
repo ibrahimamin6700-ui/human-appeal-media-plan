@@ -68,8 +68,8 @@ public class MainActivity extends Activity {
     private static final long LOCK_AFTER_MS = 30_000L;
     private static final int LEGACY_SYNC_JOB_ID = 12026;
     private static final int FILE_CHOOSER_REQUEST = 1301;
-    // The SEKNA splash now lives in the dashboard. Until its page draws, the app shows the
-    // same navy glow so there is no white flash, then hands over without a visible change.
+    // The SEKNA splash lives in the dashboard. Until its page draws, the app shows the same
+    // glow and logo, then hands over to it without a visible change.
     private static final int SPLASH_CENTER = Color.rgb(44, 86, 214);
     private static final int SPLASH_MID = Color.rgb(23, 51, 143);
     private static final int SPLASH_EDGE = Color.rgb(10, 23, 72);
@@ -351,27 +351,104 @@ public class MainActivity extends Activity {
         if (!authInProgress && !isChangingConfigurations()) backgroundedAt = System.currentTimeMillis();
     }
 
+    // Same layout as the dashboard splash: a beating gold glow, the white SEKNA logo, the
+    // tagline and an empty bar, so the logo is on screen at once and the hand-over is seamless.
     private View buildSplashView() {
         FrameLayout splash = new FrameLayout(this);
-        android.graphics.drawable.GradientDrawable glow = new android.graphics.drawable.GradientDrawable(
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{SPLASH_CENTER, SPLASH_MID, SPLASH_EDGE});
-        glow.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
-        glow.setGradientCenter(0.5f, 0.46f);
-        glow.setGradientRadius(dp(420));
-        splash.setBackground(glow);
+        bg.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+        bg.setGradientCenter(0.5f, 0.46f);
+        bg.setGradientRadius(dp(420));
+        splash.setBackground(bg);
+
+        View glow = new View(this);
+        android.graphics.drawable.GradientDrawable gold = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(140, 255, 226, 160), Color.argb(31, 255, 226, 160), Color.TRANSPARENT});
+        gold.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+        gold.setGradientRadius(dp(150));
+        gold.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        glow.setBackground(gold);
+        FrameLayout.LayoutParams glowParams = new FrameLayout.LayoutParams(dp(300), dp(300));
+        glowParams.gravity = Gravity.CENTER;
+        splash.addView(glow, glowParams);
+
+        LinearLayout brand = new LinearLayout(this);
+        brand.setOrientation(LinearLayout.VERTICAL);
+        brand.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        android.widget.ImageView logo = new android.widget.ImageView(this);
+        logo.setImageResource(R.drawable.sekna_logo_white);
+        logo.setAdjustViewBounds(true);
+        brand.addView(logo, new LinearLayout.LayoutParams(dp(220), LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView tag = new TextView(this);
+        tag.setText("The calm in the campaign.");
+        tag.setTextSize(16);
+        tag.setTextColor(Color.rgb(207, 217, 255));
+        tag.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams tagParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        tagParams.topMargin = dp(16);
+        brand.addView(tag, tagParams);
+
+        View track = new View(this);
+        android.graphics.drawable.GradientDrawable trackBg = new android.graphics.drawable.GradientDrawable();
+        trackBg.setColor(Color.argb(41, 255, 255, 255));
+        trackBg.setCornerRadius(dp(3));
+        track.setBackground(trackBg);
+        LinearLayout.LayoutParams trackParams = new LinearLayout.LayoutParams(dp(200), dp(6));
+        trackParams.topMargin = dp(28);
+        brand.addView(track, trackParams);
+
+        TextView label = new TextView(this);
+        label.setText("LOADING");
+        label.setTextSize(11);
+        label.setLetterSpacing(0.32f);
+        label.setTextColor(Color.argb(166, 207, 217, 255));
+        label.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD));
+        label.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        labelParams.topMargin = dp(14);
+        brand.addView(label, labelParams);
+
+        FrameLayout.LayoutParams brandParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+        brandParams.gravity = Gravity.CENTER;
+        splash.addView(brand, brandParams);
+
+        // The web splash sits 4% above the middle; the glow is centred at 46% of the height.
         splash.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            int size = Math.max(r - l, b - t);
-            if (size > 0) glow.setGradientRadius(size * 0.75f);
+            int height = b - t;
+            int size = Math.max(r - l, height);
+            if (size > 0) bg.setGradientRadius(size * 0.75f);
+            brand.setTranslationY(-0.04f * height);
+            glow.setTranslationY(-0.04f * height);
         });
+
+        // Entrance: the logo bursts in, then the glow keeps beating like a heart.
+        brand.setAlpha(0f);
+        brand.setScaleX(0.8f);
+        brand.setScaleY(0.8f);
+        brand.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(450)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+        android.animation.ObjectAnimator beat = android.animation.ObjectAnimator.ofPropertyValuesHolder(glow,
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.12f, 1f, 1.07f, 1f),
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.12f, 1f, 1.07f, 1f));
+        beat.setDuration(1200);
+        beat.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        beat.start();
         return splash;
     }
 
     // The dashboard's own splash is on screen: drop the native cover at once.
     private void hideSplashCover() {
         if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
-            splashView.animate().cancel();
-            splashView.setVisibility(View.GONE);
+            splashView.animate().alpha(0f).setDuration(180)
+                    .withEndAction(() -> splashView.setVisibility(View.GONE)).start();
         }
     }
 

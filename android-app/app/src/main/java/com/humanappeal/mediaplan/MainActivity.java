@@ -954,22 +954,103 @@ public class MainActivity extends Activity {
         }
     }
 
+    // Update prompt in the SEKNA look: navy card, white logo, gold button.
     private void showUpdateDialog(String version, String apkUrl) {
         if (isFinishing() || updateDialogShown) return;
         updateDialogShown = true;
-        new AlertDialog.Builder(this)
-                .setTitle("Update available")
-                .setMessage("SEKNA " + version + " is available.")
-                .setNegativeButton("Later", null)
-                .setPositiveButton("Update", (dialog, which) -> {
-                    try {
-                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_PAGE)));
-                    } catch (Exception e) {
-                        Toast.makeText(this, "Unable to open GitHub download", Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .setOnDismissListener(dialog -> updateDialogShown = false)
-                .show();
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER_HORIZONTAL);
+        card.setPadding(dp(24), dp(26), dp(24), dp(20));
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.parseColor("#2F50B5"), Color.parseColor("#152A66"), Color.parseColor("#0C1A46")});
+        bg.setCornerRadius(dp(24));
+        card.setBackground(bg);
+
+        android.widget.ImageView logo = new android.widget.ImageView(this);
+        logo.setImageResource(R.drawable.sekna_logo_white);
+        logo.setAdjustViewBounds(true);
+        card.addView(logo, new LinearLayout.LayoutParams(dp(140), dp(32)));
+
+        TextView badge = new TextView(this);
+        badge.setText("\u2193");
+        badge.setTextSize(20);
+        badge.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        badge.setTextColor(Color.parseColor("#0C1A46"));
+        badge.setGravity(Gravity.CENTER);
+        android.graphics.drawable.GradientDrawable gold = new android.graphics.drawable.GradientDrawable();
+        gold.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        gold.setColor(Color.parseColor("#E2B874"));
+        badge.setBackground(gold);
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(dp(44), dp(44));
+        bp.topMargin = dp(18);
+        card.addView(badge, bp);
+
+        TextView title = new TextView(this);
+        title.setText("SEKNA " + version + " is ready");
+        title.setTextSize(19);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setTextColor(Color.WHITE);
+        title.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-1, -2);
+        tp.topMargin = dp(14);
+        card.addView(title, tp);
+
+        TextView body = new TextView(this);
+        body.setText("You have " + BuildConfig.VERSION_NAME + ". The download page opens on GitHub; tap SEKNA.apk to install.");
+        body.setTextSize(13);
+        body.setTextColor(Color.parseColor("#C9D3F5"));
+        body.setGravity(Gravity.CENTER);
+        body.setLineSpacing(dp(2), 1f);
+        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, -2);
+        mp.topMargin = dp(6);
+        card.addView(body, mp);
+
+        TextView update = new TextView(this);
+        update.setText("Update to " + version);
+        update.setTextSize(15);
+        update.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        update.setTextColor(Color.parseColor("#0C1A46"));
+        update.setGravity(Gravity.CENTER);
+        android.graphics.drawable.GradientDrawable btn = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.parseColor("#E2B874"), Color.parseColor("#F3D79F")});
+        btn.setCornerRadius(dp(14));
+        update.setBackground(btn);
+        LinearLayout.LayoutParams up = new LinearLayout.LayoutParams(-1, dp(50));
+        up.topMargin = dp(20);
+        card.addView(update, up);
+
+        TextView later = new TextView(this);
+        later.setText("Later");
+        later.setTextSize(14);
+        later.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        later.setTextColor(Color.parseColor("#C9D3F5"));
+        later.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(44));
+        lp.topMargin = dp(4);
+        card.addView(later, lp);
+
+        update.setOnClickListener(v -> {
+            dialog.dismiss();
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_PAGE)));
+            } catch (Exception e) {
+                Toast.makeText(this, "Unable to open GitHub download", Toast.LENGTH_SHORT).show();
+            }
+        });
+        later.setOnClickListener(v -> dialog.dismiss());
+        dialog.setContentView(card);
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+            dialog.getWindow().setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(48), dp(360)), -2);
+        }
+        dialog.setOnDismissListener(d -> updateDialogShown = false);
+        dialog.show();
     }
 
     private boolean isNewerVersion(String latest, String current) {

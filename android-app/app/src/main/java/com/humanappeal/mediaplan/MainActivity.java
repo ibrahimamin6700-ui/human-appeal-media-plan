@@ -64,6 +64,7 @@ public class MainActivity extends Activity {
     public static final String EXTRA_OPEN_ACCOUNT = "open_account";
 
     private static final String LATEST_RELEASE_API = "https://api.github.com/repos/ibrahimamin6700-ui/human-appeal-media-plan/releases/latest";
+    private static final String RELEASES_PAGE = "https://github.com/ibrahimamin6700-ui/human-appeal-media-plan/releases/latest";
     private static final String APK_ASSET_NAME = "SEKNA.apk";
     private static final String LEGACY_APK_ASSET_NAME = "Human-Appeal-Media-Plan.apk";
     private static final int UNLOCK_REQUEST = 1302;
@@ -775,6 +776,18 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void openAppUpdate(String url) {
+            String target = url != null && url.startsWith("https://github.com/") ? url : RELEASES_PAGE;
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(target)));
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "Unable to open GitHub", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
+        @JavascriptInterface
         public void shareCurrentScreen(String summary, String filename) {
             runOnUiThread(() -> {
                 try {
@@ -860,6 +873,8 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             String result = "error";
             String latestShown = "";
+            String pageUrl = RELEASES_PAGE;
+            String apkFound = null;
             HttpURLConnection connection = null;
             try {
                 URL url = new URL(LATEST_RELEASE_API);
@@ -894,30 +909,46 @@ public class MainActivity extends Activity {
                     }
                 }
                 latestShown = latestTag;
+                String htmlUrl = release.optString("html_url", "");
+                if (htmlUrl.startsWith("https://github.com/")) pageUrl = htmlUrl;
                 if (apkUrl != null && isNewerVersion(latestTag, currentVersion)) {
+                    // The dashboard shows the update in its own window; see reportUpdateResult.
                     result = "available";
-                    String finalUrl = apkUrl;
-                    runOnUiThread(() -> showUpdateDialog(latestTag, finalUrl));
+                    apkFound = apkUrl;
                 } else {
                     result = "latest";
                 }
             } catch (Exception ignored) {
             } finally {
                 if (connection != null) connection.disconnect();
-                if (manual) reportUpdateResult(result, latestShown);
+                if (manual || "available".equals(result)) {
+                    reportUpdateResult(result, latestShown, pageUrl, apkFound, !manual);
+                }
             }
         }, "ha-update-check").start();
     }
 
-    private void reportUpdateResult(String status, String latest) {
+    // Sends the update check to the dashboard. If the page cannot show it (an older page,
+    // or the sign-in screen is open) the plain system prompt is the fallback.
+    private void reportUpdateResult(String status, String latest, String pageUrl, String apkUrl, boolean auto) {
         try {
             JSONObject payload = new JSONObject();
             payload.put("status", status);
             payload.put("latest", latest);
             payload.put("current", BuildConfig.VERSION_NAME);
-            String js = "(function(){try{if(window.onSeknaAppUpdate)window.onSeknaAppUpdate(" + payload + ");}catch(e){}})();";
+            payload.put("url", pageUrl);
+            payload.put("auto", auto);
+            String js = "(function(){try{if(window.onSeknaAppUpdate)return window.onSeknaAppUpdate(" + payload + ")===true;}catch(e){}return false;})();";
             runOnUiThread(() -> {
-                if (webView != null) webView.evaluateJavascript(js, null);
+                if (webView == null) {
+                    if ("available".equals(status) && apkUrl != null) showUpdateDialog(latest, apkUrl);
+                    return;
+                }
+                webView.evaluateJavascript(js, value -> {
+                    if (!"true".equals(value) && "available".equals(status) && apkUrl != null) {
+                        showUpdateDialog(latest, apkUrl);
+                    }
+                });
             });
         } catch (Exception ignored) {
         }
@@ -932,7 +963,7 @@ public class MainActivity extends Activity {
                 .setNegativeButton("Later", null)
                 .setPositiveButton("Update", (dialog, which) -> {
                     try {
-                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl)));
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_PAGE)));
                     } catch (Exception e) {
                         Toast.makeText(this, "Unable to open GitHub download", Toast.LENGTH_SHORT).show();
                     }

@@ -7,132 +7,159 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
-import android.graphics.Path;
+import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.LayerDrawable;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.LinearInterpolator;
-import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
- * SEKNA branded "No Internet" screen: soft network curves in the background,
- * an animated signal illustration, and a raised navy Retry button.
+ * SEKNA "No internet" screen in the Aurora look, the same as the web app: navy with
+ * slow blue and gold light, the logo dimmed while a soft light sweeps across it, and
+ * the gold bar of the "E" flickering like a weak bulb with small rings.
  */
 public class SeknaOfflineView extends FrameLayout {
-    private static final int NAVY = SeknaProgressBar.NAVY;
-    private static final int GOLD = Color.rgb(194, 141, 62);
-    private static final int BACKGROUND = Color.rgb(254, 254, 254);
+    private static final int NAVY = Color.rgb(12, 26, 70);
+    private static final int GOLD = Color.rgb(226, 184, 116);
+    private static final int GOLD_LIGHT = Color.rgb(243, 215, 159);
+    private static final int GOLD_DEEP = Color.rgb(194, 141, 62);
+    private static final int MIST = Color.rgb(201, 211, 245);
+    private static final int ALERT = Color.rgb(255, 143, 154);
+
+    // The gold bar inside the "E" of the 667×149 logo.
+    private static final float BAR_L = 165f / 667f, BAR_T = 64f / 149f, BAR_W = 58f / 667f, BAR_H = 23f / 149f;
 
     private final Runnable onRetry;
-    private final BackgroundCurves curves;
-    private final SignalView signal;
+    private final AuroraView aurora;
+    private final LogoFx logoFx;
     private final TextView retryButton;
+    private final TextView statusText;
+    private final View statusDot;
     private final View[] entranceViews;
     private boolean retrying = false;
     private ValueAnimator dotsAnimator;
+    private ObjectAnimator blink;
 
     public SeknaOfflineView(Context context, Runnable onRetry) {
         super(context);
         this.onRetry = onRetry;
-        setBackgroundColor(BACKGROUND);
+        setBackgroundColor(NAVY);
         setClickable(true);
 
-        curves = new BackgroundCurves(context);
-        addView(curves, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        aurora = new AuroraView(context);
+        addView(aurora, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setGravity(Gravity.CENTER_HORIZONTAL);
-        content.setPadding(dp(28), dp(24), dp(28), dp(24));
+        content.setPadding(dp(26), dp(24), dp(26), dp(24));
 
+        // The logo, dimmed, with the light sweep, rings and flickering gold bar drawn on top.
+        int logoW = dp(250), logoH = Math.round(logoW * 149f / 667f);
+        FrameLayout logoBox = new FrameLayout(context);
         ImageView logo = new ImageView(context);
-        logo.setImageResource(R.drawable.sekna_logo);
-        logo.setAdjustViewBounds(true);
-        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(160), LinearLayout.LayoutParams.WRAP_CONTENT);
-        logoParams.bottomMargin = dp(34);
-        content.addView(logo, logoParams);
+        logo.setImageResource(R.drawable.sekna_logo_white);
+        logo.setScaleType(ImageView.ScaleType.FIT_XY);
+        logo.setAlpha(0.35f);
+        logoBox.addView(logo, new LayoutParams(logoW, logoH));
+        logoFx = new LogoFx(context);
+        logoBox.addView(logoFx, new LayoutParams(logoW, logoH));
+        logoBox.setClipChildren(false);
+        content.setClipChildren(false);
+        LinearLayout.LayoutParams boxParams = new LinearLayout.LayoutParams(logoW, logoH);
+        boxParams.bottomMargin = dp(56);
+        content.addView(logoBox, boxParams);
 
-        signal = new SignalView(context);
-        LinearLayout.LayoutParams signalParams = new LinearLayout.LayoutParams(dp(150), dp(150));
-        signalParams.bottomMargin = dp(22);
-        content.addView(signal, signalParams);
+        TextView kicker = text(context, "NO INTERNET", 11, ALERT, true);
+        kicker.setLetterSpacing(0.14f);
+        content.addView(kicker);
 
-        TextView title = new TextView(context);
-        title.setText("No Internet Connection");
-        title.setTextSize(22);
-        title.setTextColor(NAVY);
-        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
-        title.setGravity(Gravity.CENTER);
-        content.addView(title);
+        TextView title = text(context, "Connection lost", 26, Color.WHITE, true);
+        LinearLayout.LayoutParams titleParams = wrap();
+        titleParams.topMargin = dp(8);
+        content.addView(title, titleParams);
 
-        View accent = new View(context);
-        GradientDrawable accentBg = new GradientDrawable();
-        accentBg.setColor(GOLD);
-        accentBg.setCornerRadius(dp(2));
-        accent.setBackground(accentBg);
-        LinearLayout.LayoutParams accentParams = new LinearLayout.LayoutParams(dp(34), dp(4));
-        accentParams.topMargin = dp(12);
-        content.addView(accent, accentParams);
-
-        TextView message = new TextView(context);
-        message.setText("Check your connection and try again.");
-        message.setTextSize(14);
-        message.setTextColor(Color.rgb(98, 102, 120));
-        message.setGravity(Gravity.CENTER);
-        message.setLineSpacing(dp(4), 1f);
-        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        messageParams.topMargin = dp(14);
-        messageParams.bottomMargin = dp(32);
+        TextView message = text(context, "We'll keep trying in the background. SEKNA updates the moment you're back online.", 14, MIST, false);
+        message.setLineSpacing(dp(3), 1f);
+        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(dp(290), LinearLayout.LayoutParams.WRAP_CONTENT);
+        messageParams.topMargin = dp(10);
         content.addView(message, messageParams);
 
+        // "Searching for a connection" chip with a blinking dot.
+        LinearLayout status = new LinearLayout(context);
+        status.setOrientation(LinearLayout.HORIZONTAL);
+        status.setGravity(Gravity.CENTER_VERTICAL);
+        status.setPadding(dp(14), dp(8), dp(14), dp(8));
+        GradientDrawable statusBg = new GradientDrawable();
+        statusBg.setCornerRadius(dp(999));
+        statusBg.setColor(Color.argb(31, 255, 143, 154));
+        statusBg.setStroke(dp(1), Color.argb(77, 255, 143, 154));
+        status.setBackground(statusBg);
+        statusDot = new View(context);
+        GradientDrawable dot = new GradientDrawable();
+        dot.setShape(GradientDrawable.OVAL);
+        dot.setColor(ALERT);
+        statusDot.setBackground(dot);
+        status.addView(statusDot, new LinearLayout.LayoutParams(dp(8), dp(8)));
+        statusText = text(context, "Searching for a connection", 12, Color.rgb(255, 179, 186), true);
+        LinearLayout.LayoutParams stParams = wrap();
+        stParams.leftMargin = dp(8);
+        status.addView(statusText, stParams);
+        LinearLayout.LayoutParams statusParams = wrap();
+        statusParams.topMargin = dp(14);
+        content.addView(status, statusParams);
+
         retryButton = buildRetryButton(context);
-        LinearLayout.LayoutParams retryParams = new LinearLayout.LayoutParams(dp(210), dp(52));
+        LinearLayout.LayoutParams retryParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52));
+        retryParams.topMargin = dp(20);
         content.addView(retryButton, retryParams);
 
-        FrameLayout.LayoutParams contentParams = new FrameLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
+        FrameLayout.LayoutParams contentParams = new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
         contentParams.gravity = Gravity.CENTER;
         addView(content, contentParams);
 
-        entranceViews = new View[]{logo, signal, title, accent, message, retryButton};
+        entranceViews = new View[]{logoBox, kicker, title, message, status, retryButton};
+    }
+
+    private TextView text(Context context, String value, int sp, int color, boolean bold) {
+        TextView t = new TextView(context);
+        t.setText(value);
+        t.setTextSize(sp);
+        t.setTextColor(color);
+        t.setGravity(Gravity.CENTER);
+        t.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
+        return t;
+    }
+
+    private LinearLayout.LayoutParams wrap() {
+        return new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
     }
 
     private TextView buildRetryButton(Context context) {
         TextView button = new TextView(context);
-        button.setText("↻  Retry");
-        button.setTextSize(16);
-        button.setTextColor(Color.WHITE);
+        button.setText("Try again");
+        button.setTextSize(15);
+        button.setTextColor(Color.rgb(15, 31, 82));
         button.setGravity(Gravity.CENTER);
-        button.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
-
-        GradientDrawable body = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.rgb(74, 104, 196), NAVY, Color.rgb(20, 38, 96)});
-        body.setCornerRadius(dp(26));
-        GradientDrawable gloss = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(95, 255, 255, 255), Color.argb(0, 255, 255, 255)});
-        gloss.setCornerRadius(dp(26));
-        LayerDrawable layers = new LayerDrawable(new android.graphics.drawable.Drawable[]{body, gloss});
-        layers.setLayerInset(1, dp(3), dp(2), dp(3), dp(26));
-        button.setBackground(layers);
-        button.setElevation(dp(8));
-
+        button.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        GradientDrawable body = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{GOLD, GOLD_LIGHT});
+        body.setCornerRadius(dp(15));
+        button.setBackground(body);
+        button.setElevation(dp(6));
         button.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                v.animate().scaleX(0.95f).scaleY(0.95f).translationZ(-dp(4)).setDuration(90).start();
+                v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(90).start();
             } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
-                v.animate().scaleX(1f).scaleY(1f).translationZ(0).setDuration(160).start();
+                v.animate().scaleX(1f).scaleY(1f).setDuration(160).start();
             }
             return false;
         });
@@ -144,9 +171,10 @@ public class SeknaOfflineView extends FrameLayout {
         return button;
     }
 
-    /** Called when the screen appears: staggered entrance and looping animations. */
+    /** Called when the screen appears: staggered entrance and the looping animations. */
     public void show() {
         setRetrying(false);
+        statusText.setText("Searching for a connection");
         for (int i = 0; i < entranceViews.length; i++) {
             View v = entranceViews[i];
             v.animate().cancel();
@@ -156,14 +184,21 @@ public class SeknaOfflineView extends FrameLayout {
                     .setStartDelay(80L * i).setDuration(420)
                     .setInterpolator(new DecelerateInterpolator()).start();
         }
-        curves.start();
-        signal.start();
+        aurora.start();
+        logoFx.start();
+        if (blink != null) blink.cancel();
+        blink = ObjectAnimator.ofFloat(statusDot, "alpha", 1f, 0.25f);
+        blink.setDuration(600);
+        blink.setRepeatCount(ValueAnimator.INFINITE);
+        blink.setRepeatMode(ValueAnimator.REVERSE);
+        blink.start();
     }
 
     /** Stops all looping animations while the screen is hidden. */
     public void hide() {
-        curves.stop();
-        signal.stop();
+        aurora.stop();
+        logoFx.stop();
+        if (blink != null) blink.cancel();
         stopDots();
     }
 
@@ -171,6 +206,7 @@ public class SeknaOfflineView extends FrameLayout {
     public void retryFailed() {
         if (!retrying) return;
         setRetrying(false);
+        statusText.setText("Still offline · trying again");
         ObjectAnimator shake = ObjectAnimator.ofFloat(retryButton, "translationX",
                 0, dp(10), -dp(10), dp(7), -dp(7), dp(3), 0);
         shake.setDuration(420);
@@ -184,7 +220,7 @@ public class SeknaOfflineView extends FrameLayout {
             startDots();
         } else {
             stopDots();
-            retryButton.setText("↻  Retry");
+            retryButton.setText("Try again");
         }
     }
 
@@ -216,33 +252,28 @@ public class SeknaOfflineView extends FrameLayout {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
-    /** Faint network curves with breathing nodes, echoing the SEKNA splash. */
-    private static class BackgroundCurves extends View {
-        private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint halo = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint node = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Path top = new Path();
-        private final Path bottom = new Path();
-        private float phase = 0f;
+    /** Slow blue and gold light drifting over the navy, with a faint grid. */
+    private static class AuroraView extends View {
+        private final Paint glow = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint grid = new Paint();
+        private float t = 0f;
         private ValueAnimator animator;
 
-        BackgroundCurves(Context context) {
+        AuroraView(Context context) {
             super(context);
-            line.setStyle(Paint.Style.STROKE);
-            line.setStrokeCap(Paint.Cap.ROUND);
-            line.setColor(Color.rgb(241, 242, 249));
-            halo.setColor(Color.rgb(238, 239, 247));
-            node.setColor(Color.rgb(214, 217, 236));
+            grid.setColor(Color.argb(13, 255, 255, 255));
+            grid.setStrokeWidth(1f);
         }
 
         void start() {
             if (animator != null && animator.isRunning()) return;
             animator = ValueAnimator.ofFloat(0f, 1f);
-            animator.setDuration(2600);
+            animator.setDuration(15000);
             animator.setRepeatCount(ValueAnimator.INFINITE);
             animator.setRepeatMode(ValueAnimator.REVERSE);
+            animator.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
             animator.addUpdateListener(a -> {
-                phase = (float) a.getAnimatedValue();
+                t = (float) a.getAnimatedValue();
                 invalidate();
             });
             animator.start();
@@ -252,136 +283,91 @@ public class SeknaOfflineView extends FrameLayout {
             if (animator != null) animator.cancel();
         }
 
-        @Override
-        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-            super.onSizeChanged(w, h, oldw, oldh);
-            line.setStrokeWidth(w * 0.018f);
-            top.reset();
-            top.moveTo(-w * 0.05f, h * 0.13f);
-            top.cubicTo(w * 0.22f, h * 0.19f, w * 0.30f, h * 0.30f, w * 0.48f, h * 0.38f);
-            bottom.reset();
-            bottom.moveTo(w * 1.05f, h * 0.55f);
-            bottom.cubicTo(w * 0.75f, h * 0.68f, w * 0.62f, h * 0.84f, -w * 0.05f, h * 0.86f);
+        private void blob(Canvas c, float cx, float cy, float r, int color, int alpha) {
+            glow.setShader(new RadialGradient(cx, cy, r, Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)),
+                    Color.argb(0, Color.red(color), Color.green(color), Color.blue(color)), Shader.TileMode.CLAMP));
+            c.drawCircle(cx, cy, r, glow);
         }
 
         @Override
-        protected void onDraw(Canvas canvas) {
-            int w = getWidth();
-            int h = getHeight();
-            canvas.drawPath(top, line);
-            canvas.drawPath(bottom, line);
-            float pulse = 1f + 0.18f * phase;
-            drawNode(canvas, w * 0.17f, h * 0.175f, w * 0.03f, pulse);
-            drawNode(canvas, w * 0.29f, h * 0.265f, w * 0.018f, 1.18f - 0.18f * phase);
-            drawNode(canvas, w * 0.80f, h * 0.635f, w * 0.03f, 1.18f - 0.18f * phase);
-            drawNode(canvas, w * 0.68f, h * 0.73f, w * 0.018f, pulse);
-        }
-
-        private void drawNode(Canvas canvas, float x, float y, float r, float scale) {
-            canvas.drawCircle(x, y, r * 2f * scale, halo);
-            canvas.drawCircle(x, y, r, node);
+        protected void onDraw(Canvas c) {
+            float w = getWidth(), h = getHeight(), d = getResources().getDisplayMetrics().density;
+            float step = 32 * d;
+            for (float x = 0; x < w; x += step) c.drawLine(x, 0, x, h, grid);
+            for (float y = 0; y < h; y += step) c.drawLine(0, y, w, y, grid);
+            blob(c, w * (0.05f + 0.25f * t), h * (0.08f + 0.18f * t), w * 0.75f, Color.rgb(61, 107, 255), 170);
+            blob(c, w * (0.95f - 0.3f * t), h * (0.88f - 0.22f * t), w * 0.6f, GOLD, 90);
+            blob(c, w * (0.15f + 0.2f * t), h * (1.02f - 0.08f * t), w * 0.6f, Color.rgb(32, 60, 142), 200);
         }
     }
 
-    /** Wi-Fi glyph with a gold "off" slash, ripple rings and a gentle float. */
-    private static class SignalView extends View {
+    /** On top of the dimmed logo: a soft light sweeping across, rings, and the flickering gold bar. */
+    private static class LogoFx extends View {
+        private final Paint bar = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint halo = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint disc = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint discEdge = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint arc = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint dot = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint slash = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint slashGap = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final RectF oval = new RectF();
-        private float phase = 0f;
+        private final Paint sweep = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF r = new RectF();
+        private long start = 0;
         private ValueAnimator animator;
 
-        SignalView(Context context) {
+        LogoFx(Context context) {
             super(context);
             ring.setStyle(Paint.Style.STROKE);
-            discEdge.setStyle(Paint.Style.STROKE);
-            discEdge.setColor(Color.argb(40, 32, 60, 142));
-            arc.setStyle(Paint.Style.STROKE);
-            arc.setStrokeCap(Paint.Cap.ROUND);
-            arc.setColor(NAVY);
-            dot.setColor(NAVY);
-            slash.setStyle(Paint.Style.STROKE);
-            slash.setStrokeCap(Paint.Cap.ROUND);
-            slash.setColor(GOLD);
-            slashGap.setStyle(Paint.Style.STROKE);
-            slashGap.setStrokeCap(Paint.Cap.ROUND);
-            setElevation(0);
+            setLayerType(LAYER_TYPE_HARDWARE, null);
         }
 
         void start() {
+            start = System.currentTimeMillis();
             if (animator != null && animator.isRunning()) return;
             animator = ValueAnimator.ofFloat(0f, 1f);
-            animator.setDuration(2400);
+            animator.setDuration(1000);
             animator.setRepeatCount(ValueAnimator.INFINITE);
-            animator.setInterpolator(new LinearInterpolator());
-            animator.addUpdateListener(a -> {
-                phase = (float) a.getAnimatedValue();
-                invalidate();
-            });
+            animator.addUpdateListener(a -> invalidate());
             animator.start();
-            setScaleX(0.6f);
-            setScaleY(0.6f);
-            animate().scaleX(1f).scaleY(1f).setDuration(620).setStartDelay(120)
-                    .setInterpolator(new OvershootInterpolator(1.6f)).start();
         }
 
         void stop() {
             if (animator != null) animator.cancel();
         }
 
-        @Override
-        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-            super.onSizeChanged(w, h, oldw, oldh);
-            float size = Math.min(w, h);
-            disc.setShader(new LinearGradient(0, h / 2f - size * 0.3f, 0, h / 2f + size * 0.3f,
-                    Color.WHITE, Color.rgb(232, 237, 249), Shader.TileMode.CLAMP));
-            discEdge.setStrokeWidth(size * 0.012f);
-            ring.setStrokeWidth(size * 0.012f);
-            arc.setStrokeWidth(size * 0.045f);
-            slash.setStrokeWidth(size * 0.045f);
-            slashGap.setStrokeWidth(size * 0.09f);
+        /** Same steps as the web: the bar is on for short moments, like a weak bulb. */
+        private boolean bulbOn(float p) {
+            return (p < 0.09f) || (p >= 0.20f && p < 0.27f) || (p >= 0.60f && p < 0.65f);
         }
 
         @Override
-        protected void onDraw(Canvas canvas) {
-            float w = getWidth();
-            float h = getHeight();
-            float size = Math.min(w, h);
-            float cx = w / 2f;
-            float cy = h / 2f;
-            float discR = size * 0.30f;
+        protected void onDraw(Canvas c) {
+            float w = getWidth(), h = getHeight(), d = getResources().getDisplayMetrics().density;
+            long now = System.currentTimeMillis() - start;
 
-            // Ripple rings moving outward.
-            for (int i = 0; i < 3; i++) {
-                float p = (phase + i / 3f) % 1f;
-                float r = discR + (size * 0.5f - discR) * p;
-                ring.setColor(Color.argb((int) (90 * (1f - p)), 32, 60, 142));
-                canvas.drawCircle(cx, cy, r, ring);
+            // Light sweeping left to right across the logo every 2.6 s.
+            float sp = (now % 2600) / 2600f;
+            float sw = w * 0.22f, sx = -w * 0.25f + sp * w * 1.3f;
+            sweep.setShader(new LinearGradient(sx, 0, sx + sw, 0,
+                    new int[]{Color.argb(0, 201, 211, 245), Color.argb(120, 201, 211, 245), Color.argb(0, 201, 211, 245)},
+                    null, Shader.TileMode.CLAMP));
+            c.drawRect(sx, -h * 0.1f, sx + sw, h * 1.1f, sweep);
+
+            float cx = w * (BAR_L + BAR_W / 2f), cy = h * (BAR_T + BAR_H / 2f);
+            // Two rings spreading from the bar every 2.2 s.
+            ring.setStrokeWidth(2 * d);
+            for (int i = 0; i < 2; i++) {
+                float rp = ((now + i * 700) % 2200) / 2200f;
+                ring.setColor(Color.argb(Math.round(153 * (1 - rp)), 226, 184, 116));
+                c.drawCircle(cx, cy, 7 * d * (1 + 8 * rp), ring);
             }
 
-            canvas.drawCircle(cx, cy, discR, disc);
-            canvas.drawCircle(cx, cy, discR, discEdge);
-
-            // Gentle float of the glyph.
-            float bob = (float) Math.sin(phase * Math.PI * 2) * size * 0.012f;
-            float gx = cx;
-            float gy = cy + size * 0.085f + bob;
-            float[] radii = {size * 0.17f, size * 0.115f, size * 0.06f};
-            for (float r : radii) {
-                oval.set(gx - r, gy - r, gx + r, gy + r);
-                canvas.drawArc(oval, 225, 90, false, arc);
+            // The gold bar, flickering.
+            boolean on = bulbOn((now % 2200) / 2200f);
+            r.set(w * BAR_L, h * BAR_T, w * (BAR_L + BAR_W), h * (BAR_T + BAR_H));
+            if (on) {
+                halo.setShader(new RadialGradient(cx, cy, w * 0.09f, Color.argb(150, 226, 184, 116), Color.argb(0, 226, 184, 116), Shader.TileMode.CLAMP));
+                c.drawCircle(cx, cy, w * 0.09f, halo);
             }
-            canvas.drawCircle(gx, gy, size * 0.022f, dot);
-
-            float sx = size * 0.15f;
-            slashGap.setColor(Color.rgb(242, 244, 251));
-            canvas.drawLine(cx - sx, cy - sx + bob, cx + sx, cy + sx + bob, slashGap);
-            canvas.drawLine(cx - sx, cy - sx + bob, cx + sx, cy + sx + bob, slash);
+            bar.setShader(new LinearGradient(0, r.top, 0, r.bottom, GOLD_LIGHT, GOLD_DEEP, Shader.TileMode.CLAMP));
+            bar.setAlpha(on ? 255 : 38);
+            c.drawRoundRect(r, 3 * d, 3 * d, bar);
         }
     }
 }

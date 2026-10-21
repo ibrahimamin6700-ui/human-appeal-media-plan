@@ -18,6 +18,8 @@ public final class SeknaNotifications {
     public static final int ANNOUNCEMENT_ID = 2203;
     public static final int APP_UPDATE_ID = 2204;
     public static final int ACCESS_ID = 2205;
+    public static final int TASKS_ID = 2206;
+    public static final String EXTRA_OPEN_TASKS = "open_tasks";
     public static final String EXTRA_CHECK_UPDATE = "check_app_update";
 
     private static final int SEKNA_NAVY = Color.rgb(32, 60, 142);
@@ -25,6 +27,10 @@ public final class SeknaNotifications {
     private SeknaNotifications() {}
 
     public static void show(Context context, int id, String title, String body, boolean checkUpdate) {
+        show(context, id, title, body, checkUpdate, false);
+    }
+
+    public static void show(Context context, int id, String title, String body, boolean checkUpdate, boolean openTasks) {
         try {
             if (Build.VERSION.SDK_INT >= 33 &&
                     context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -35,6 +41,7 @@ public final class SeknaNotifications {
             Intent open = new Intent(context, MainActivity.class);
             open.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             if (checkUpdate) open.putExtra(EXTRA_CHECK_UPDATE, true);
+            if (openTasks) open.putExtra(EXTRA_OPEN_TASKS, true);
             PendingIntent pendingIntent = PendingIntent.getActivity(
                     context, id, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 

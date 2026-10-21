@@ -102,6 +102,7 @@ public class MainActivity extends Activity {
 
         pendingOpenAccount = normalizeAccount(
                 getIntent() == null ? null : getIntent().getStringExtra(EXTRA_OPEN_ACCOUNT));
+        pendingOpenTasks = getIntent() != null && getIntent().getBooleanExtra(SeknaNotifications.EXTRA_OPEN_TASKS, false);
         applySystemBars(HumanAppealApp.darkMode(this));
 
         rootView = new FrameLayout(this);
@@ -476,6 +477,7 @@ public class MainActivity extends Activity {
         }
 
         mainHandler.postDelayed(this::applyPendingAccount, 250);
+        mainHandler.postDelayed(this::applyPendingTasks, 1200);
     }
 
     private void showOfflineScreen() {
@@ -685,6 +687,11 @@ public class MainActivity extends Activity {
                     HumanAppealApp.setLastAccount(getApplicationContext(), account);
                 }
             } catch (Throwable ignored) {}
+        }
+
+        @JavascriptInterface
+        public void setPushUser(String topic) {
+            HumanAppealApp.setUserTopic(getApplicationContext(), topic);
         }
 
         @JavascriptInterface
@@ -1104,6 +1111,21 @@ public class MainActivity extends Activity {
         if (intent != null && intent.getBooleanExtra(SeknaNotifications.EXTRA_CHECK_UPDATE, false)) {
             mainHandler.postDelayed(() -> checkForGitHubUpdate(false), 600);
         }
+        if (intent != null && intent.getBooleanExtra(SeknaNotifications.EXTRA_OPEN_TASKS, false)) {
+            pendingOpenTasks = true;
+            if (dashboardReady) mainHandler.postDelayed(this::applyPendingTasks, 300);
+        }
+    }
+
+    private boolean pendingOpenTasks = false;
+
+    /** A Team Tasks notification opens My Tasks once the dashboard is ready. */
+    private void applyPendingTasks() {
+        if (webView == null || !pendingOpenTasks) return;
+        pendingOpenTasks = false;
+        try {
+            webView.evaluateJavascript("(function(){try{if(typeof openTasks==='function')openTasks('mine');}catch(e){}})();", null);
+        } catch (Throwable ignored) {}
     }
 
     @Override

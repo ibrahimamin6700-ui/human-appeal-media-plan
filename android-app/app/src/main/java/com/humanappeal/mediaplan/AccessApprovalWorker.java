@@ -86,7 +86,42 @@ public class AccessApprovalWorker extends Worker {
         return Result.success();
     }
 
+    /** Asks the SEKNA server first; Apps Script answers only if the server cannot be reached. */
     private static JSONObject fetchStatus(String token) throws Exception {
+        try {
+            return fetchServerStatus(token);
+        } catch (Exception e) {
+            return fetchAppsScriptStatus(token);
+        }
+    }
+
+    private static JSONObject fetchServerStatus(String token) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("fn", "accessStatus");
+        body.put("args", new org.json.JSONArray().put(token));
+        HttpURLConnection post = (HttpURLConnection) new URL(MainActivity.SERVER_API_URL + "/call").openConnection();
+        post.setConnectTimeout(15000);
+        post.setReadTimeout(20000);
+        post.setRequestMethod("POST");
+        post.setDoOutput(true);
+        post.setRequestProperty("Content-Type", "text/plain");
+        try (OutputStream out = post.getOutputStream()) {
+            out.write(body.toString().getBytes(StandardCharsets.UTF_8));
+        }
+        try (BufferedReader in = new BufferedReader(
+                new InputStreamReader(post.getInputStream(), StandardCharsets.UTF_8))) {
+            StringBuilder text = new StringBuilder();
+            String line;
+            while ((line = in.readLine()) != null) text.append(line);
+            JSONObject answer = new JSONObject(text.toString());
+            if (!answer.optBoolean("ok", false) || answer.optJSONObject("result") == null) throw new Exception("No answer");
+            return answer.getJSONObject("result");
+        } finally {
+            post.disconnect();
+        }
+    }
+
+    private static JSONObject fetchAppsScriptStatus(String token) throws Exception {
         JSONObject body = new JSONObject();
         body.put("action", "status");
         body.put("token", token);

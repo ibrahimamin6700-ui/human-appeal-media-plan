@@ -186,9 +186,13 @@ public class MainActivity extends Activity {
 
                 webView.setVisibility(View.VISIBLE);
                 hideOfflineScreen();
-                hideGoogleHostUi();
-                mainHandler.postDelayed(MainActivity.this::hideGoogleHostUi, 250);
-                mainHandler.postDelayed(MainActivity.this::hideGoogleHostUi, 900);
+                // Only the old Apps Script page has Google's frame to tidy; on the SEKNA web app this
+                // scan of every block re-laid out the page three times and made it stutter on open.
+                if (isAppsScriptPage(url)) {
+                    hideGoogleHostUi();
+                    mainHandler.postDelayed(MainActivity.this::hideGoogleHostUi, 250);
+                    mainHandler.postDelayed(MainActivity.this::hideGoogleHostUi, 900);
+                }
                 mainHandler.postDelayed(MainActivity.this::applyPendingAccount, 1150);
                 mainHandler.postDelayed(() -> {
                     if (!dashboardReady) hideSplash();
@@ -523,6 +527,11 @@ public class MainActivity extends Activity {
             webView.stopLoading();
             webView.loadUrl(WEB_APP_URL);
         } catch (Throwable ignored) {}
+    }
+
+    private static boolean isAppsScriptPage(String url) {
+        String u = url == null ? "" : url.toLowerCase();
+        return u.contains("script.google.com") || u.contains("googleusercontent.com");
     }
 
     private void hideGoogleHostUi() {

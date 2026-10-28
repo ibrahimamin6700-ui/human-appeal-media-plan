@@ -88,7 +88,7 @@ public class SeknaOfflineView extends FrameLayout {
         titleParams.topMargin = dp(8);
         content.addView(title, titleParams);
 
-        TextView message = text(context, "We'll keep trying in the background. SEKNA updates the moment you're back online.", 14, MIST, false);
+        TextView message = text(context, "We'll keep trying in the background. HEMERA updates the moment you're back online.", 14, MIST, false);
         message.setLineSpacing(dp(3), 1f);
         LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(dp(290), LinearLayout.LayoutParams.WRAP_CONTENT);
         messageParams.topMargin = dp(10);

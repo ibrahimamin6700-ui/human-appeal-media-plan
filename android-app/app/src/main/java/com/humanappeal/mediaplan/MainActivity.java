@@ -280,7 +280,7 @@ public class MainActivity extends Activity {
             hideLock();
             return;
         }
-        authenticate("Unlock SEKNA", this::hideLock, null);
+        authenticate("Unlock HEMERA", this::hideLock, null);
     }
 
     /** Asks for the fingerprint / face, with the phone PIN, pattern or password as a fallback. */
@@ -562,7 +562,7 @@ public class MainActivity extends Activity {
         box.setBackgroundColor(Color.WHITE);
 
         TextView title = new TextView(this);
-        title.setText("SEKNA");
+        title.setText("HEMERA");
         title.setTextSize(22);
         title.setTextColor(Color.rgb(34, 40, 50));
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -1008,7 +1008,7 @@ public class MainActivity extends Activity {
         card.addView(badge, bp);
 
         TextView title = new TextView(this);
-        title.setText("SEKNA " + version + " is ready");
+        title.setText("HEMERA " + version + " is ready");
         title.setTextSize(19);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         title.setTextColor(Color.WHITE);

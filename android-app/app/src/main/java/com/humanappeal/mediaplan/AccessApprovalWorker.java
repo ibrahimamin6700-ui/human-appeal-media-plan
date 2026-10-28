@@ -75,7 +75,7 @@ public class AccessApprovalWorker extends Worker {
                 String first = name.isEmpty() ? "" : name.split("\\s+")[0];
                 SeknaNotifications.show(context, SeknaNotifications.ACCESS_ID,
                         first.isEmpty() ? "You're in!" : "You're in, " + first + "!",
-                        "Your SEKNA access has been approved. Tap to open your dashboard.", false);
+                        "Your HEMERA access has been approved. Tap to open your dashboard.", false);
                 stop(context);
             } else if (!"Pending".equals(value) && !value.isEmpty()) {
                 stop(context);

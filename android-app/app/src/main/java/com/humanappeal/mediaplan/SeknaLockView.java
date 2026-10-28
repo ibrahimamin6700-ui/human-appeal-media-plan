@@ -31,7 +31,7 @@ public class SeknaLockView extends FrameLayout {
         box.addView(logo, new LinearLayout.LayoutParams(Math.round(150 * density), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         TextView title = new TextView(context);
-        title.setText("SEKNA is locked");
+        title.setText("HEMERA is locked");
         title.setTextColor(SeknaProgressBar.NAVY);
         title.setTextSize(19);
         title.setTypeface(Typeface.DEFAULT_BOLD);

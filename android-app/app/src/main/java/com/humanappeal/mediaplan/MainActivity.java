@@ -151,6 +151,12 @@ public class MainActivity extends Activity {
         settings.setSupportZoom(false);
         settings.setTextZoom(100);
         settings.setMediaPlaybackRequiresUserGesture(false);
+        // Smoother scrolling and taps: the page is drawn ahead of the screen, and the page's
+        // renderer keeps its priority while the app is in front.
+        settings.setOffscreenPreRaster(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
+        }
 
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidShare");
 
@@ -476,7 +482,7 @@ public class MainActivity extends Activity {
         if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
             splashView.animate()
                     .alpha(0f)
-                    .setDuration(220)
+                    .setDuration(260)
                     .withEndAction(() -> splashView.setVisibility(View.GONE))
                     .start();
         }
@@ -641,7 +647,13 @@ public class MainActivity extends Activity {
      * white bars with dark icons in light mode, near-black bars in dark mode.
      * Android 7 cannot draw dark navigation icons, so it keeps a black nav bar.
      */
+    private Boolean barsDark = null;
+
     private void applySystemBars(boolean dark) {
+        // Only when the theme changes: setting the bars again on every return to the app
+        // re-laid out the whole window and made the page blink.
+        if (barsDark != null && barsDark == dark) return;
+        barsDark = dark;
         try {
             boolean lightNavIcons = !dark && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
             getWindow().setStatusBarColor(dark ? Color.rgb(11, 13, 17) : Color.WHITE);

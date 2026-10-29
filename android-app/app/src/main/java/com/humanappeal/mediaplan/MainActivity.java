@@ -66,7 +66,8 @@ public class MainActivity extends Activity {
 
     private static final String LATEST_RELEASE_API = "https://api.github.com/repos/ibrahimamin6700-ui/human-appeal-media-plan/releases/latest";
     private static final String RELEASES_PAGE = "https://github.com/ibrahimamin6700-ui/human-appeal-media-plan/releases/latest";
-    private static final String APK_ASSET_NAME = "SEKNA.apk";
+    private static final String APK_ASSET_NAME = "HEMERA.apk";
+    private static final String OLD_APK_ASSET_NAME = "SEKNA.apk";
     private static final String LEGACY_APK_ASSET_NAME = "Human-Appeal-Media-Plan.apk";
     private static final int UNLOCK_REQUEST = 1302;
     // SEKNA locks again after this long in the background.
@@ -901,7 +902,7 @@ public class MainActivity extends Activity {
                 connection.setConnectTimeout(7000);
                 connection.setReadTimeout(7000);
                 connection.setRequestProperty("Accept", "application/vnd.github+json");
-                connection.setRequestProperty("User-Agent", "SEKNA-Android");
+                connection.setRequestProperty("User-Agent", "HEMERA-Android");
                 int code = connection.getResponseCode();
                 if (code == 404) result = "latest"; // no official release published yet
                 if (code != 200) return;
@@ -921,7 +922,7 @@ public class MainActivity extends Activity {
                     for (int i = 0; i < assets.length(); i++) {
                         JSONObject asset = assets.optJSONObject(i);
                         String assetName = asset == null ? "" : asset.optString("name");
-                        if (APK_ASSET_NAME.equals(assetName) || LEGACY_APK_ASSET_NAME.equals(assetName)) {
+                        if (APK_ASSET_NAME.equals(assetName) || OLD_APK_ASSET_NAME.equals(assetName) || LEGACY_APK_ASSET_NAME.equals(assetName)) {
                             apkUrl = asset.optString("browser_download_url", null);
                             break;
                         }
@@ -1020,7 +1021,7 @@ public class MainActivity extends Activity {
         card.addView(title, tp);
 
         TextView body = new TextView(this);
-        body.setText("You have " + BuildConfig.VERSION_NAME + ". The download page opens on GitHub; tap SEKNA.apk to install.");
+        body.setText("You have " + BuildConfig.VERSION_NAME + ". The download page opens on GitHub; tap HEMERA.apk to install.");
         body.setTextSize(13);
         body.setTextColor(Color.parseColor("#C9D3F5"));
         body.setGravity(Gravity.CENTER);

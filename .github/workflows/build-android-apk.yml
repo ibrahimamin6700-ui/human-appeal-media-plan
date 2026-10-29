@@ -96,20 +96,22 @@ jobs:
         shell: bash
         run: |
           if [ "$SIGNED_BUILD" = "true" ]; then
-            cp android-app/app/build/outputs/apk/release/app-release.apk SEKNA.apk
+            cp android-app/app/build/outputs/apk/release/app-release.apk HEMERA.apk
           else
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk SEKNA.apk
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk HEMERA.apk
           fi
+          # Apps from before the rename look for SEKNA.apk in the release, so a copy goes up under that name too.
+          cp HEMERA.apk SEKNA.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SEKNA-APK
-          path: SEKNA.apk
+          name: HEMERA-APK
+          path: HEMERA.apk
           if-no-files-found: error
 
       # Only a manual run with a release_version publishes an official release.
-      # SEKNA notifies the team about it automatically (Apps Script checks GitHub Releases).
+      # HEMERA notifies the team about it automatically (Apps Script checks GitHub Releases).
       - name: Publish GitHub Release
         if: env.SIGNED_BUILD == 'true' && env.RELEASE_VERSION != ''
         shell: bash
@@ -117,8 +119,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="v${RELEASE_VERSION}"
-          gh release create "$TAG" SEKNA.apk \
+          gh release create "$TAG" HEMERA.apk SEKNA.apk \
             --target "$GITHUB_SHA" \
-            --title "SEKNA ${RELEASE_VERSION}" \
-            --notes "SEKNA ${RELEASE_VERSION} for Android. Open SEKNA to install the update." \
+            --title "HEMERA ${RELEASE_VERSION}" \
+            --notes "HEMERA ${RELEASE_VERSION} for Android. Open HEMERA to install the update. Install HEMERA.apk." \
             --latest

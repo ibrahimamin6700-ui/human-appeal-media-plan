@@ -66,6 +66,8 @@ public class MainActivity extends Activity {
 
     private static final String LATEST_RELEASE_API = "https://api.github.com/repos/ibrahimamin6700-ui/human-appeal-media-plan/releases/latest";
     private static final String RELEASES_PAGE = "https://github.com/ibrahimamin6700-ui/human-appeal-media-plan/releases/latest";
+    // The update itself downloads from the HEMERA website (lighter than GitHub); GitHub only tells which version is out.
+    private static final String WEB_APK = "https://sekna-app.web.app/get/HEMERA.apk";
     private static final String APK_ASSET_NAME = "HEMERA.apk";
     private static final String OLD_APK_ASSET_NAME = "SEKNA.apk";
     private static final String LEGACY_APK_ASSET_NAME = "Human-Appeal-Media-Plan.apk";
@@ -797,12 +799,12 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void openAppUpdate(String url) {
-            String target = url != null && url.startsWith("https://github.com/") ? url : RELEASES_PAGE;
+            String target = url != null && (url.startsWith("https://sekna-app.web.app/") || url.startsWith("https://github.com/")) ? url : WEB_APK;
             runOnUiThread(() -> {
                 try {
                     startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(target)));
                 } catch (Exception e) {
-                    Toast.makeText(MainActivity.this, "Unable to open GitHub", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, "Unable to open the download", Toast.LENGTH_SHORT).show();
                 }
             });
         }
@@ -893,7 +895,7 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             String result = "error";
             String latestShown = "";
-            String pageUrl = RELEASES_PAGE;
+            String pageUrl = WEB_APK;
             String apkFound = null;
             HttpURLConnection connection = null;
             try {
@@ -929,8 +931,6 @@ public class MainActivity extends Activity {
                     }
                 }
                 latestShown = latestTag;
-                String htmlUrl = release.optString("html_url", "");
-                if (htmlUrl.startsWith("https://github.com/")) pageUrl = htmlUrl;
                 if (apkUrl != null && isNewerVersion(latestTag, currentVersion)) {
                     // The dashboard shows the update in its own window; see reportUpdateResult.
                     result = "available";
@@ -1021,7 +1021,7 @@ public class MainActivity extends Activity {
         card.addView(title, tp);
 
         TextView body = new TextView(this);
-        body.setText("You have " + BuildConfig.VERSION_NAME + ". The download page opens on GitHub; tap HEMERA.apk to install.");
+        body.setText("You have " + BuildConfig.VERSION_NAME + ". HEMERA.apk downloads from the HEMERA website; open it to install.");
         body.setTextSize(13);
         body.setTextColor(Color.parseColor("#C9D3F5"));
         body.setGravity(Gravity.CENTER);
@@ -1058,9 +1058,9 @@ public class MainActivity extends Activity {
         update.setOnClickListener(v -> {
             dialog.dismiss();
             try {
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_PAGE)));
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(WEB_APK)));
             } catch (Exception e) {
-                Toast.makeText(this, "Unable to open GitHub download", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Unable to open the download", Toast.LENGTH_SHORT).show();
             }
         });
         later.setOnClickListener(v -> dialog.dismiss());

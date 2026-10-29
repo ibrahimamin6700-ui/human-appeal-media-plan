@@ -35,8 +35,8 @@ public class SeknaOfflineView extends FrameLayout {
     private static final int MIST = Color.rgb(201, 211, 245);
     private static final int ALERT = Color.rgb(255, 143, 154);
 
-    // The gold bar inside the "E" of the 667×149 logo.
-    private static final float BAR_L = 165f / 667f, BAR_T = 64f / 149f, BAR_W = 58f / 667f, BAR_H = 23f / 149f;
+    // The gold bar inside the "E" of the 667×171 logo (the sun rays of the R sit above the letters).
+    private static final float BAR_L = 134f / 667f, BAR_T = 75f / 171f, BAR_W = 82f / 667f, BAR_H = 22f / 171f;
 
     private final Runnable onRetry;
     private final AuroraView aurora;
@@ -64,7 +64,7 @@ public class SeknaOfflineView extends FrameLayout {
         content.setPadding(dp(26), dp(24), dp(26), dp(24));
 
         // The logo, dimmed, with the light sweep, rings and flickering gold bar drawn on top.
-        int logoW = dp(250), logoH = Math.round(logoW * 149f / 667f);
+        int logoW = dp(250), logoH = Math.round(logoW * 171f / 667f);
         FrameLayout logoBox = new FrameLayout(context);
         ImageView logo = new ImageView(context);
         logo.setImageResource(R.drawable.sekna_logo_white);

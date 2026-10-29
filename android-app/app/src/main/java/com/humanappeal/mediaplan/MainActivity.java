@@ -396,9 +396,11 @@ public class MainActivity extends Activity {
         brand.addView(logo, new LinearLayout.LayoutParams(dp(220), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         TextView tag = new TextView(this);
-        tag.setText("The calm in the campaign.");
-        tag.setTextSize(16);
-        tag.setTextColor(Color.rgb(207, 217, 255));
+        tag.setText("DAY BY DAY");
+        tag.setTextSize(12);
+        tag.setLetterSpacing(0.32f);
+        tag.setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD));
+        tag.setTextColor(Color.rgb(201, 214, 255));
         tag.setIncludeFontPadding(false);
         LinearLayout.LayoutParams tagParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -991,7 +993,7 @@ public class MainActivity extends Activity {
         android.widget.ImageView logo = new android.widget.ImageView(this);
         logo.setImageResource(R.drawable.sekna_logo_white);
         logo.setAdjustViewBounds(true);
-        card.addView(logo, new LinearLayout.LayoutParams(dp(140), dp(32)));
+        card.addView(logo, new LinearLayout.LayoutParams(dp(140), dp(36)));
 
         TextView badge = new TextView(this);
         badge.setText("\u2193");

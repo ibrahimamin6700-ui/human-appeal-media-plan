@@ -70,6 +70,15 @@ jobs:
           fi
           echo "APP_VERSION_NAME=$RELEASE_VERSION" >> "$GITHUB_ENV"
 
+      - name: Version a test build after the latest release
+        if: env.RELEASE_VERSION == ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null | sed 's/^[vV]//')
+          if [[ "$LATEST" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "APP_BASE_VERSION=$LATEST" >> "$GITHUB_ENV"; fi
+
       - name: Decode signing keystore
         if: env.SIGNED_BUILD == 'true'
         shell: bash

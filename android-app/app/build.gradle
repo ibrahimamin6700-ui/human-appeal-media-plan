@@ -5,11 +5,17 @@ plugins {
 
 // Dashboard UI is served live from the Apps Script deployment; this build syncs the Android wrapper with the current GitHub release flow.
 def githubRun = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
-// Official releases pass APP_VERSION_NAME (e.g. 1.1.0); the code is MAJOR*1,000,000 + MINOR*1,000 + PATCH.
+// Official releases pass APP_VERSION_NAME (e.g. 1.3.0); the code is MAJOR*100,000,000 + MINOR*100,000 + PATCH*100
+// (bigger than every code of the old MAJOR*1,000,000 + MINOR*1,000 + PATCH scheme).
+// Test builds pass APP_BASE_VERSION, the latest release: they are called e.g. 1.2.7.80 and sit just above it
+// (code + run % 100), so the app never offers the older release as an "update" and installs over it.
 def releaseVersion = System.getenv('APP_VERSION_NAME') ?: ''
-def releaseParts = releaseVersion ==~ /\d+\.\d+\.\d+/ ? releaseVersion.tokenize('.').collect { it.toInteger() } : null
-def appVersionCode = releaseParts ? releaseParts[0] * 1000000 + releaseParts[1] * 1000 + releaseParts[2] : githubRun
-def appVersionName = releaseParts ? releaseVersion : "1.0.${githubRun}"
+def baseVersion = System.getenv('APP_BASE_VERSION') ?: ''
+def parts = { v -> v ==~ /\d+\.\d+\.\d+/ ? v.tokenize('.').collect { it.toInteger() } : null }
+def codeOf = { p -> p[0] * 100000000 + p[1] * 100000 + p[2] * 100 }
+def releaseParts = parts(releaseVersion), baseParts = parts(baseVersion)
+def appVersionCode = releaseParts ? codeOf(releaseParts) : baseParts ? codeOf(baseParts) + (githubRun % 99) + 1 : githubRun
+def appVersionName = releaseParts ? releaseVersion : baseParts ? "${baseVersion}.${githubRun}" : "1.0.${githubRun}"
 def keystoreFile = System.getenv('ANDROID_KEYSTORE_FILE')
 def keystorePassword = System.getenv('ANDROID_KEYSTORE_PASSWORD')
 def keyAliasValue = System.getenv('ANDROID_KEY_ALIAS')

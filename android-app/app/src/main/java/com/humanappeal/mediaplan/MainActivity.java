@@ -86,6 +86,7 @@ public class MainActivity extends Activity {
     private FrameLayout rootView;
     private WebView webView;
     private View splashView;
+    private View splashFill;
     private SeknaOfflineView offlineView;
     private boolean dashboardReady = false;
     private boolean mainFrameLoadFailed = false;
@@ -416,14 +417,27 @@ public class MainActivity extends Activity {
         tagParams.topMargin = dp(16);
         brand.addView(tag, tagParams);
 
-        View track = new View(this);
+        // The loading bar: a gold fill that grows while the page loads and fills up when it is ready.
+        FrameLayout track = new FrameLayout(this);
         android.graphics.drawable.GradientDrawable trackBg = new android.graphics.drawable.GradientDrawable();
         trackBg.setColor(Color.argb(41, 255, 255, 255));
         trackBg.setCornerRadius(dp(3));
         track.setBackground(trackBg);
+        track.setClipToOutline(true);
+        splashFill = new View(this);
+        android.graphics.drawable.GradientDrawable fillBg = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.parseColor("#C89434"), Color.parseColor("#E2B874"), Color.parseColor("#F3D79F")});
+        fillBg.setCornerRadius(dp(3));
+        splashFill.setBackground(fillBg);
+        splashFill.setPivotX(0f);
+        splashFill.setScaleX(0.04f);
+        track.addView(splashFill, new FrameLayout.LayoutParams(-1, -1));
         LinearLayout.LayoutParams trackParams = new LinearLayout.LayoutParams(dp(200), dp(6));
         trackParams.topMargin = dp(28);
         brand.addView(track, trackParams);
+        splashFill.animate().scaleX(0.82f).setDuration(2600)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
 
         TextView label = new TextView(this);
         label.setText("LOADING");
@@ -480,7 +494,11 @@ public class MainActivity extends Activity {
         dashboardReady = true;
 
         if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
+            // The bar fills up first, then the opening screen fades into the dashboard.
+            if (splashFill != null) splashFill.animate().cancel();
+            if (splashFill != null) splashFill.animate().scaleX(1f).setDuration(220).start();
             splashView.animate()
+                    .setStartDelay(200)
                     .alpha(0f)
                     .setDuration(260)
                     .withEndAction(() -> splashView.setVisibility(View.GONE))

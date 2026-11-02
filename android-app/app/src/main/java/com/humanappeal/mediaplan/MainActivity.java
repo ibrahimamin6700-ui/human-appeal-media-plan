@@ -78,9 +78,9 @@ public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1301;
     // The SEKNA splash lives in the dashboard. Until its page draws, the app shows the same
     // glow and logo, then hands over to it without a visible change.
-    private static final int SPLASH_CENTER = Color.rgb(44, 86, 214);
-    private static final int SPLASH_MID = Color.rgb(23, 51, 143);
-    private static final int SPLASH_EDGE = Color.rgb(10, 23, 72);
+    private static final int SPLASH_CENTER = Color.rgb(22, 48, 127);
+    private static final int SPLASH_MID = Color.rgb(15, 33, 99);
+    private static final int SPLASH_EDGE = Color.rgb(10, 21, 68);
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private FrameLayout rootView;
@@ -372,7 +372,7 @@ public class MainActivity extends Activity {
         if (!authInProgress && !isChangingConfigurations()) backgroundedAt = System.currentTimeMillis();
     }
 
-    // Same layout as the dashboard splash: a beating gold glow, the white SEKNA logo, the
+    // Same layout as the dashboard splash: two breathing lights, the white HEMERA logo, the
     // tagline and an empty bar, so the logo is on screen at once and the hand-over is seamless.
     private View buildSplashView() {
         FrameLayout splash = new FrameLayout(this);
@@ -384,17 +384,15 @@ public class MainActivity extends Activity {
         bg.setGradientRadius(dp(420));
         splash.setBackground(bg);
 
-        View glow = new View(this);
-        android.graphics.drawable.GradientDrawable gold = new android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(140, 255, 226, 160), Color.argb(31, 255, 226, 160), Color.TRANSPARENT});
-        gold.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
-        gold.setGradientRadius(dp(150));
-        gold.setShape(android.graphics.drawable.GradientDrawable.OVAL);
-        glow.setBackground(gold);
-        FrameLayout.LayoutParams glowParams = new FrameLayout.LayoutParams(dp(300), dp(300));
+        // Two soft lights, gold and blue, that slowly breathe behind the logo (as on the web).
+        View glow = softLight(Color.argb(87, 242, 179, 65), dp(210));
+        View glow2 = softLight(Color.argb(102, 110, 150, 255), dp(230));
+        FrameLayout.LayoutParams glowParams = new FrameLayout.LayoutParams(dp(420), dp(420));
         glowParams.gravity = Gravity.CENTER;
         splash.addView(glow, glowParams);
+        FrameLayout.LayoutParams glow2Params = new FrameLayout.LayoutParams(dp(460), dp(460));
+        glow2Params.gravity = Gravity.CENTER;
+        splash.addView(glow2, glow2Params);
 
         LinearLayout brand = new LinearLayout(this);
         brand.setOrientation(LinearLayout.VERTICAL);
@@ -405,17 +403,28 @@ public class MainActivity extends Activity {
         logo.setAdjustViewBounds(true);
         brand.addView(logo, new LinearLayout.LayoutParams(dp(220), LinearLayout.LayoutParams.WRAP_CONTENT));
 
+        // DAY BY DAY spaced out between two thin gold lines.
+        LinearLayout tagRow = new LinearLayout(this);
+        tagRow.setOrientation(LinearLayout.HORIZONTAL);
+        tagRow.setGravity(Gravity.CENTER_VERTICAL);
+        tagRow.addView(goldLine(false), new LinearLayout.LayoutParams(dp(26), dp(1)));
         TextView tag = new TextView(this);
         tag.setText("DAY BY DAY");
-        tag.setTextSize(12);
-        tag.setLetterSpacing(0.32f);
-        tag.setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD));
+        tag.setTextSize(11.5f);
+        tag.setLetterSpacing(0.5f);
+        tag.setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL));
         tag.setTextColor(Color.rgb(201, 214, 255));
         tag.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        textParams.leftMargin = dp(12);
+        textParams.rightMargin = dp(6);
+        tagRow.addView(tag, textParams);
+        tagRow.addView(goldLine(true), new LinearLayout.LayoutParams(dp(26), dp(1)));
         LinearLayout.LayoutParams tagParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         tagParams.topMargin = dp(16);
-        brand.addView(tag, tagParams);
+        brand.addView(tagRow, tagParams);
 
         // The loading bar: a gold fill that grows while the page loads and fills up when it is ready.
         FrameLayout track = new FrameLayout(this);
@@ -462,7 +471,10 @@ public class MainActivity extends Activity {
             int size = Math.max(r - l, height);
             if (size > 0) bg.setGradientRadius(size * 0.75f);
             brand.setTranslationY(-0.04f * height);
-            glow.setTranslationY(-0.04f * height);
+            glow.setTranslationX(-dp(30));
+            glow.setTranslationY(-0.04f * height - dp(22));
+            glow2.setTranslationX(dp(40));
+            glow2.setTranslationY(-0.04f * height + dp(40));
         });
 
         // Entrance: the logo bursts in, then the glow keeps beating like a heart.
@@ -471,13 +483,44 @@ public class MainActivity extends Activity {
         brand.setScaleY(0.8f);
         brand.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(450)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
-        android.animation.ObjectAnimator beat = android.animation.ObjectAnimator.ofPropertyValuesHolder(glow,
-                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.12f, 1f, 1.07f, 1f),
-                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.12f, 1f, 1.07f, 1f));
-        beat.setDuration(1200);
-        beat.setRepeatCount(android.animation.ValueAnimator.INFINITE);
-        beat.start();
+        breathe(glow, 0);
+        breathe(glow2, 1800);
         return splash;
+    }
+
+    private View softLight(int color, int radius) {
+        View v = new View(this);
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, new int[]{color, Color.TRANSPARENT});
+        g.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+        g.setGradientRadius(radius);
+        g.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        v.setBackground(g);
+        return v;
+    }
+
+    private View goldLine(boolean flip) {
+        View v = new View(this);
+        v.setBackground(new android.graphics.drawable.GradientDrawable(
+                flip ? android.graphics.drawable.GradientDrawable.Orientation.RIGHT_LEFT : android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.TRANSPARENT, Color.rgb(226, 184, 116)}));
+        return v;
+    }
+
+    // A slow breath: the light grows and brightens, then fades back, every 3.6 seconds.
+    private void breathe(View v, long delay) {
+        android.animation.ObjectAnimator a = android.animation.ObjectAnimator.ofPropertyValuesHolder(v,
+                android.animation.PropertyValuesHolder.ofFloat(View.ALPHA, 0.35f, 1f, 0.35f),
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 0.85f, 1.08f, 0.85f),
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.85f, 1.08f, 0.85f));
+        a.setDuration(3600);
+        a.setStartDelay(delay);
+        a.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        a.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        v.setAlpha(0.35f);
+        v.setScaleX(0.85f);
+        v.setScaleY(0.85f);
+        a.start();
     }
 
     // The dashboard's own splash is on screen: drop the native cover at once.

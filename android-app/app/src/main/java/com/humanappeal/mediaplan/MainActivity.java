@@ -383,25 +383,62 @@ public class MainActivity extends Activity {
         bg.setGradientCenter(0.5f, 0.46f);
         bg.setGradientRadius(dp(420));
         splash.setBackground(bg);
+        // The sign-in screen's background (blue light top left, gold light bottom right, a soft grid), drawn at full phone size.
+        android.widget.ImageView back = new android.widget.ImageView(this);
+        back.setImageResource(R.drawable.splash_bg);
+        back.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        splash.addView(back, new FrameLayout.LayoutParams(-1, -1));
 
         // Two soft lights, gold and blue, that slowly breathe behind the logo (as on the web).
         View glow = softLight(Color.argb(87, 242, 179, 65), dp(210));
         View glow2 = softLight(Color.argb(102, 110, 150, 255), dp(230));
         FrameLayout.LayoutParams glowParams = new FrameLayout.LayoutParams(dp(420), dp(420));
         glowParams.gravity = Gravity.CENTER;
+        glow.setVisibility(View.GONE);
         splash.addView(glow, glowParams);
         FrameLayout.LayoutParams glow2Params = new FrameLayout.LayoutParams(dp(460), dp(460));
         glow2Params.gravity = Gravity.CENTER;
+        glow2.setVisibility(View.GONE);
         splash.addView(glow2, glow2Params);
 
         LinearLayout brand = new LinearLayout(this);
         brand.setOrientation(LinearLayout.VERTICAL);
         brand.setGravity(Gravity.CENTER_HORIZONTAL);
 
-        android.widget.ImageView logo = new android.widget.ImageView(this);
-        logo.setImageResource(R.drawable.sekna_logo_white);
-        logo.setAdjustViewBounds(true);
-        brand.addView(logo, new LinearLayout.LayoutParams(dp(220), LinearLayout.LayoutParams.WRAP_CONTENT));
+        // The sharp logo in two layers: the word, and the sun that rises into its R and then glows.
+        FrameLayout logo = new FrameLayout(this);
+        logo.setClipChildren(false);
+        int logoW = dp(220), logoH = Math.round(logoW * 171f / 667f);
+        View sunGlow = softLight(Color.argb(150, 255, 210, 110), dp(40));
+        FrameLayout.LayoutParams sunGlowParams = new FrameLayout.LayoutParams(dp(80), dp(80));
+        sunGlowParams.leftMargin = Math.round(logoW * 0.796f) - dp(40);
+        sunGlowParams.topMargin = Math.round(logoH * 0.32f) - dp(40);
+        logo.addView(sunGlow, sunGlowParams);
+        android.widget.ImageView logoBody = new android.widget.ImageView(this);
+        logoBody.setImageResource(R.drawable.hemera_logo_body);
+        logoBody.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
+        logo.addView(logoBody, new FrameLayout.LayoutParams(logoW, logoH));
+        android.widget.ImageView logoSun = new android.widget.ImageView(this);
+        logoSun.setImageResource(R.drawable.hemera_logo_sun);
+        logoSun.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
+        logo.addView(logoSun, new FrameLayout.LayoutParams(logoW, logoH));
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(logoW, logoH);
+        brand.addView(logo, logoParams);
+        brand.setClipChildren(false);
+        logoSun.setAlpha(0f);
+        logoSun.setTranslationY(logoH * 0.35f);
+        logoSun.animate().alpha(1f).translationY(0f).setStartDelay(150).setDuration(1000)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(2f)).start();
+        sunGlow.setAlpha(0f);
+        android.animation.ObjectAnimator sunPulse = android.animation.ObjectAnimator.ofPropertyValuesHolder(sunGlow,
+                android.animation.PropertyValuesHolder.ofFloat(View.ALPHA, 0.5f, 1f, 0.5f),
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.3f, 1f),
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.3f, 1f));
+        sunPulse.setDuration(1300);
+        sunPulse.setStartDelay(900);
+        sunPulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        sunPulse.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        sunPulse.start();
 
         // DAY BY DAY spaced out between two thin gold lines.
         LinearLayout tagRow = new LinearLayout(this);
@@ -483,8 +520,7 @@ public class MainActivity extends Activity {
         brand.setScaleY(0.8f);
         brand.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(450)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
-        breathe(glow, 0);
-        breathe(glow2, 1800);
+        splash.setClipChildren(false);
         return splash;
     }
 

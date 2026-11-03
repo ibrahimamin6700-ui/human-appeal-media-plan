@@ -411,11 +411,11 @@ public class MainActivity extends Activity {
         // The sharp logo in two layers: the word, and the sun that rises into its R and then glows.
         FrameLayout logo = new FrameLayout(this);
         logo.setClipChildren(false);
-        int logoW = dp(220), logoH = Math.round(logoW * 171f / 667f);
+        int logoW = dp(240), logoH = Math.round(logoW * 231f / 727f);
         View sunGlow = softLight(Color.argb(150, 255, 210, 110), dp(40));
         FrameLayout.LayoutParams sunGlowParams = new FrameLayout.LayoutParams(dp(80), dp(80));
-        sunGlowParams.leftMargin = Math.round(logoW * 0.796f) - dp(40);
-        sunGlowParams.topMargin = Math.round(logoH * 0.32f) - dp(40);
+        sunGlowParams.leftMargin = Math.round(logoW * 0.772f) - dp(40);
+        sunGlowParams.topMargin = Math.round(logoH * 0.30f) - dp(40);
         logo.addView(sunGlow, sunGlowParams);
         android.widget.ImageView logoBody = new android.widget.ImageView(this);
         logoBody.setImageResource(R.drawable.hemera_logo_body);

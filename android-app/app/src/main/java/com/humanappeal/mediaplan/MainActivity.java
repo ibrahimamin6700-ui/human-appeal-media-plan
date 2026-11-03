@@ -87,6 +87,9 @@ public class MainActivity extends Activity {
     private WebView webView;
     private View splashView;
     private View splashFill;
+    // The opening screen is only a look: it stays for this long whatever the network does, then fades.
+    private static final long SPLASH_MS = 2300L;
+    private long splashShownAt = 0L;
     private SeknaOfflineView offlineView;
     private boolean dashboardReady = false;
     private boolean mainFrameLoadFailed = false;
@@ -521,6 +524,8 @@ public class MainActivity extends Activity {
         brand.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(450)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
         splash.setClipChildren(false);
+        splashShownAt = android.os.SystemClock.uptimeMillis();
+        mainHandler.postDelayed(this::fadeSplashLook, SPLASH_MS);
         return splash;
     }
 
@@ -559,8 +564,22 @@ public class MainActivity extends Activity {
         a.start();
     }
 
-    // The dashboard's own splash is on screen: drop the native cover at once.
+    // Fades the opening screen after its fixed time, without waiting for the page.
+    private void fadeSplashLook() {
+        if (splashView == null || splashView.getVisibility() != View.VISIBLE) return;
+        if (splashFill != null) splashFill.animate().cancel();
+        if (splashFill != null) splashFill.animate().scaleX(1f).setDuration(220).start();
+        splashView.animate()
+                .setStartDelay(200)
+                .alpha(0f)
+                .setDuration(260)
+                .withEndAction(() -> splashView.setVisibility(View.GONE))
+                .start();
+    }
+
+    // The dashboard's own splash is on screen: drop the native cover (once its fixed time is up).
     private void hideSplashCover() {
+        if (android.os.SystemClock.uptimeMillis() - splashShownAt < SPLASH_MS) return;
         if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
             splashView.animate().alpha(0f).setDuration(180)
                     .withEndAction(() -> splashView.setVisibility(View.GONE)).start();
@@ -572,7 +591,8 @@ public class MainActivity extends Activity {
 
         dashboardReady = true;
 
-        if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
+        if (splashView != null && splashView.getVisibility() == View.VISIBLE
+                && android.os.SystemClock.uptimeMillis() - splashShownAt >= SPLASH_MS) {
             // The bar fills up first, then the opening screen fades into the dashboard.
             if (splashFill != null) splashFill.animate().cancel();
             if (splashFill != null) splashFill.animate().scaleX(1f).setDuration(220).start();

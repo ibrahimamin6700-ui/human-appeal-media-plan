@@ -76,6 +76,11 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
             SeknaNotifications.show(this, SeknaNotifications.TASKS_ID, title, body, false, true);
             return;
         }
+        // A season greeting on its day: the season's picture with the greeting.
+        if ("greeting".equals(eventType)) {
+            SeknaNotifications.showPicture(this, SeknaNotifications.GREETING_ID, title, body, data == null ? null : data.get("image"));
+            return;
+        }
         if ("app_update".equals(eventType)) {
             SeknaNotifications.show(this, SeknaNotifications.APP_UPDATE_ID, title, body, true);
             return;

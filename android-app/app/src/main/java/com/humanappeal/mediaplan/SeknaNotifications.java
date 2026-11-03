@@ -7,6 +7,8 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.os.Build;
 
@@ -19,6 +21,7 @@ public final class SeknaNotifications {
     public static final int APP_UPDATE_ID = 2204;
     public static final int ACCESS_ID = 2205;
     public static final int TASKS_ID = 2206;
+    public static final int GREETING_ID = 2207;
     public static final String EXTRA_OPEN_TASKS = "open_tasks";
     public static final String EXTRA_CHECK_UPDATE = "check_app_update";
 
@@ -31,6 +34,30 @@ public final class SeknaNotifications {
     }
 
     public static void show(Context context, int id, String title, String body, boolean checkUpdate, boolean openTasks) {
+        show(context, id, title, body, checkUpdate, openTasks, null);
+    }
+
+    /** A season greeting: the season's picture with the greeting under it (text only if the picture cannot load). */
+    public static void showPicture(Context context, int id, String title, String body, String imageUrl) {
+        show(context, id, title, body, false, false, loadPicture(imageUrl));
+    }
+
+    private static Bitmap loadPicture(String url) {
+        if (url == null || !url.startsWith("https://")) return null;
+        java.net.HttpURLConnection c = null;
+        try {
+            c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            c.setConnectTimeout(6000);
+            c.setReadTimeout(8000);
+            try (java.io.InputStream in = c.getInputStream()) { return BitmapFactory.decodeStream(in); }
+        } catch (Throwable e) {
+            return null;
+        } finally {
+            if (c != null) c.disconnect();
+        }
+    }
+
+    private static void show(Context context, int id, String title, String body, boolean checkUpdate, boolean openTasks, Bitmap picture) {
         try {
             if (Build.VERSION.SDK_INT >= 33 &&
                     context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -55,6 +82,10 @@ public final class SeknaNotifications {
                     .setStyle(new Notification.BigTextStyle().bigText(body))
                     .setContentIntent(pendingIntent)
                     .setAutoCancel(true);
+            if (picture != null) {
+                builder.setLargeIcon(picture)
+                        .setStyle(new Notification.BigPictureStyle().bigPicture(picture).bigLargeIcon((Bitmap) null).setSummaryText(body));
+            }
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) builder.setSound(null);
 
             NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);

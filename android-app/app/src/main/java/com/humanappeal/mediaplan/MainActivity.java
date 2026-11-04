@@ -375,49 +375,18 @@ public class MainActivity extends Activity {
         if (!authInProgress && !isChangingConfigurations()) backgroundedAt = System.currentTimeMillis();
     }
 
-    // Same layout as the dashboard splash: two breathing lights, the white HEMERA logo, the
-    // tagline and an empty bar, so the logo is on screen at once and the hand-over is seamless.
+    // Same look as the dashboard splash ("Live pulse"): plain HEMERA blue lit from above, the white
+    // HEMERA logo alone in the centre, a green heartbeat across that fades behind it, Live above,
+    // and the sync line near the bottom.
     private View buildSplashView() {
         FrameLayout splash = new FrameLayout(this);
-        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{SPLASH_CENTER, SPLASH_MID, SPLASH_EDGE});
-        bg.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
-        bg.setGradientCenter(0.5f, 0.46f);
-        bg.setGradientRadius(dp(420));
-        splash.setBackground(bg);
-        // The sign-in screen's background (blue light top left, gold light bottom right, a soft grid), drawn at full phone size.
-        android.widget.ImageView back = new android.widget.ImageView(this);
-        back.setImageResource(R.drawable.splash_bg);
-        back.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
-        splash.addView(back, new FrameLayout.LayoutParams(-1, -1));
+        splash.setBackgroundColor(Color.rgb(10, 30, 90));
+        int logoW = dp(220), logoH = Math.round(logoW * 171f / 667f);
+        splash.addView(new SeknaPulseSplash(this, logoW / 2f), new FrameLayout.LayoutParams(-1, -1));
 
-        // Two soft lights, gold and blue, that slowly breathe behind the logo (as on the web).
-        View glow = softLight(Color.argb(87, 242, 179, 65), dp(210));
-        View glow2 = softLight(Color.argb(102, 110, 150, 255), dp(230));
-        FrameLayout.LayoutParams glowParams = new FrameLayout.LayoutParams(dp(420), dp(420));
-        glowParams.gravity = Gravity.CENTER;
-        glow.setVisibility(View.GONE);
-        splash.addView(glow, glowParams);
-        FrameLayout.LayoutParams glow2Params = new FrameLayout.LayoutParams(dp(460), dp(460));
-        glow2Params.gravity = Gravity.CENTER;
-        glow2.setVisibility(View.GONE);
-        splash.addView(glow2, glow2Params);
-
-        LinearLayout brand = new LinearLayout(this);
-        brand.setOrientation(LinearLayout.VERTICAL);
-        brand.setGravity(Gravity.CENTER_HORIZONTAL);
-
-        // The sharp logo in two layers: the word, and the sun that rises into its R and then glows.
+        // The sharp logo in two layers: the word, and the sun that rises into its R.
         FrameLayout logo = new FrameLayout(this);
         logo.setClipChildren(false);
-        int logoW = dp(220), logoH = Math.round(logoW * 171f / 667f);
-        View sunGlow = softLight(Color.argb(150, 255, 210, 110), dp(40));
-        FrameLayout.LayoutParams sunGlowParams = new FrameLayout.LayoutParams(dp(80), dp(80));
-        sunGlowParams.leftMargin = Math.round(logoW * 0.772f) - dp(40);
-        sunGlowParams.topMargin = Math.round(logoH * 0.30f) - dp(40);
-        sunGlow.setVisibility(View.GONE); // the logo is sharp: no light behind the R
-        logo.addView(sunGlow, sunGlowParams);
         android.widget.ImageView logoBody = new android.widget.ImageView(this);
         logoBody.setImageResource(R.drawable.hemera_logo_body);
         logoBody.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
@@ -426,104 +395,66 @@ public class MainActivity extends Activity {
         logoSun.setImageResource(R.drawable.hemera_logo_sun);
         logoSun.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
         logo.addView(logoSun, new FrameLayout.LayoutParams(logoW, logoH));
-        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(logoW, logoH);
-        brand.addView(logo, logoParams);
-        brand.setClipChildren(false);
+        FrameLayout.LayoutParams logoParams = new FrameLayout.LayoutParams(logoW, logoH);
+        logoParams.gravity = Gravity.CENTER;
+        splash.addView(logo, logoParams);
+        logo.setAlpha(0f);
+        logo.animate().alpha(1f).setStartDelay(100).setDuration(900).start();
         logoSun.setAlpha(0f);
         logoSun.setTranslationY(logoH * 0.35f);
         logoSun.animate().alpha(1f).translationY(0f).setStartDelay(150).setDuration(1000)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(2f)).start();
-        sunGlow.setAlpha(0f);
-        android.animation.ObjectAnimator sunPulse = android.animation.ObjectAnimator.ofPropertyValuesHolder(sunGlow,
-                android.animation.PropertyValuesHolder.ofFloat(View.ALPHA, 0.5f, 1f, 0.5f),
-                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.3f, 1f),
-                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.3f, 1f));
-        sunPulse.setDuration(1300);
-        sunPulse.setStartDelay(900);
-        sunPulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
-        sunPulse.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
-        // no pulse: the light behind the R is gone
 
-        // DAY BY DAY spaced out between two thin gold lines.
-        LinearLayout tagRow = new LinearLayout(this);
-        tagRow.setOrientation(LinearLayout.HORIZONTAL);
-        tagRow.setGravity(Gravity.CENTER_VERTICAL);
-        tagRow.addView(goldLine(false), new LinearLayout.LayoutParams(dp(26), dp(1)));
-        TextView tag = new TextView(this);
-        tag.setText("DAY BY DAY");
-        tag.setTextSize(11.5f);
-        tag.setLetterSpacing(0.5f);
-        tag.setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL));
-        tag.setTextColor(Color.rgb(201, 214, 255));
-        tag.setIncludeFontPadding(false);
-        LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        textParams.leftMargin = dp(12);
-        textParams.rightMargin = dp(6);
-        tagRow.addView(tag, textParams);
-        tagRow.addView(goldLine(true), new LinearLayout.LayoutParams(dp(26), dp(1)));
-        LinearLayout.LayoutParams tagParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        tagParams.topMargin = dp(16);
-        brand.addView(tagRow, tagParams);
+        // LIVE with a pulsing green dot, above the logo.
+        int green = Color.rgb(57, 226, 154);
+        LinearLayout live = new LinearLayout(this);
+        live.setOrientation(LinearLayout.HORIZONTAL);
+        live.setGravity(Gravity.CENTER_VERTICAL);
+        View dot = new View(this);
+        android.graphics.drawable.GradientDrawable dotBg = new android.graphics.drawable.GradientDrawable();
+        dotBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        dotBg.setColor(green);
+        dot.setBackground(dotBg);
+        live.addView(dot, new LinearLayout.LayoutParams(dp(9), dp(9)));
+        TextView liveText = new TextView(this);
+        liveText.setText("LIVE");
+        liveText.setTextSize(12);
+        liveText.setLetterSpacing(0.16f);
+        liveText.setTextColor(green);
+        liveText.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD));
+        liveText.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams ltp = new LinearLayout.LayoutParams(-2, -2);
+        ltp.leftMargin = dp(8);
+        live.addView(liveText, ltp);
+        FrameLayout.LayoutParams liveParams = new FrameLayout.LayoutParams(-2, -2);
+        liveParams.gravity = Gravity.CENTER;
+        splash.addView(live, liveParams);
+        live.setTranslationY(-dp(86));
+        android.animation.ObjectAnimator dotPulse = android.animation.ObjectAnimator.ofPropertyValuesHolder(dot,
+                android.animation.PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0.35f, 1f),
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.35f, 1f),
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.35f, 1f));
+        dotPulse.setDuration(1400);
+        dotPulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        dotPulse.start();
 
-        // The loading bar: a gold fill that grows while the page loads and fills up when it is ready.
-        FrameLayout track = new FrameLayout(this);
-        android.graphics.drawable.GradientDrawable trackBg = new android.graphics.drawable.GradientDrawable();
-        trackBg.setColor(Color.argb(41, 255, 255, 255));
-        trackBg.setCornerRadius(dp(3));
-        track.setBackground(trackBg);
-        track.setClipToOutline(true);
+        // The sync line: USA, then AR, then Ready in green.
+        TextView sync = new TextView(this);
+        sync.setText("Syncing Human Appeal USA…");
+        sync.setTextSize(12);
+        sync.setTextColor(Color.rgb(159, 176, 224));
+        sync.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
+        sync.setGravity(Gravity.CENTER);
+        FrameLayout.LayoutParams syncParams = new FrameLayout.LayoutParams(-1, -2);
+        syncParams.gravity = Gravity.BOTTOM;
+        syncParams.bottomMargin = dp(56);
+        splash.addView(sync, syncParams);
+        mainHandler.postDelayed(() -> sync.setText("Syncing AR…"), 650);
+        mainHandler.postDelayed(() -> { sync.setText("Ready"); sync.setTextColor(green); }, 1300);
+
+        // The bar is not shown, but the hand-over code still fills it.
         splashFill = new View(this);
-        android.graphics.drawable.GradientDrawable fillBg = new android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.parseColor("#C89434"), Color.parseColor("#E2B874"), Color.parseColor("#F3D79F")});
-        fillBg.setCornerRadius(dp(3));
-        splashFill.setBackground(fillBg);
-        splashFill.setPivotX(0f);
-        splashFill.setScaleX(0.04f);
-        track.addView(splashFill, new FrameLayout.LayoutParams(-1, -1));
-        LinearLayout.LayoutParams trackParams = new LinearLayout.LayoutParams(dp(200), dp(6));
-        trackParams.topMargin = dp(28);
-        brand.addView(track, trackParams);
-        splashFill.animate().scaleX(0.82f).setDuration(2600)
-                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
 
-        TextView label = new TextView(this);
-        label.setText("LOADING");
-        label.setTextSize(11);
-        label.setLetterSpacing(0.32f);
-        label.setTextColor(Color.argb(166, 207, 217, 255));
-        label.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD));
-        label.setIncludeFontPadding(false);
-        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        labelParams.topMargin = dp(14);
-        brand.addView(label, labelParams);
-
-        FrameLayout.LayoutParams brandParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-        brandParams.gravity = Gravity.CENTER;
-        splash.addView(brand, brandParams);
-
-        // The web splash sits 4% above the middle; the glow is centred at 46% of the height.
-        splash.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            int height = b - t;
-            int size = Math.max(r - l, height);
-            if (size > 0) bg.setGradientRadius(size * 0.75f);
-            brand.setTranslationY(-0.04f * height);
-            glow.setTranslationX(-dp(30));
-            glow.setTranslationY(-0.04f * height - dp(22));
-            glow2.setTranslationX(dp(40));
-            glow2.setTranslationY(-0.04f * height + dp(40));
-        });
-
-        // Entrance: the logo bursts in, then the glow keeps beating like a heart.
-        brand.setAlpha(0f);
-        brand.setScaleX(0.8f);
-        brand.setScaleY(0.8f);
-        brand.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(450)
-                .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
         splash.setClipChildren(false);
         splashShownAt = android.os.SystemClock.uptimeMillis();
         mainHandler.postDelayed(this::fadeSplashLook, SPLASH_MS);

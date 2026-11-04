@@ -375,82 +375,104 @@ public class MainActivity extends Activity {
         if (!authInProgress && !isChangingConfigurations()) backgroundedAt = System.currentTimeMillis();
     }
 
-    // Same look as the dashboard splash ("Live pulse"): plain HEMERA blue lit from above, the white
-    // HEMERA logo alone in the centre, a green heartbeat across that fades behind it, Live above,
-    // and the sync line near the bottom.
+    // Same look as the dashboard splash ("Reveal"): the new HEMERA logo on its own blue lit from above
+    // with a touch of gold; the word is uncovered left to right, the gold line draws out from the
+    // middle, DAY BY DAY opens out, and a thin gold bar fills near the bottom.
     private View buildSplashView() {
         FrameLayout splash = new FrameLayout(this);
-        splash.setBackgroundColor(Color.rgb(10, 30, 90));
-        int logoW = dp(220), logoH = Math.round(logoW * 171f / 667f);
-        splash.addView(new SeknaPulseSplash(this, logoW / 2f), new FrameLayout.LayoutParams(-1, -1));
+        android.graphics.drawable.GradientDrawable base = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.rgb(11, 42, 120), Color.rgb(10, 29, 98), Color.rgb(8, 22, 80), Color.rgb(6, 15, 56)});
+        android.graphics.drawable.GradientDrawable topLight = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(240, 28, 76, 175), Color.TRANSPARENT});
+        topLight.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+        topLight.setGradientCenter(0.5f, 0f);
+        android.graphics.drawable.GradientDrawable goldLight = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(34, 226, 184, 116), Color.TRANSPARENT});
+        goldLight.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+        goldLight.setGradientCenter(0.92f, 0.4f);
+        splash.setBackground(new android.graphics.drawable.LayerDrawable(
+                new android.graphics.drawable.Drawable[]{base, topLight, goldLight}));
+        splash.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            int w = r - l, h = b - t;
+            if (w > 0) { topLight.setGradientRadius(Math.max(w, h) * 0.55f); goldLight.setGradientRadius(w * 0.45f); }
+        });
 
-        // The sharp logo in two layers: the word, and the sun that rises into its R.
-        FrameLayout logo = new FrameLayout(this);
-        logo.setClipChildren(false);
-        android.widget.ImageView logoBody = new android.widget.ImageView(this);
-        logoBody.setImageResource(R.drawable.hemera_logo_body);
-        logoBody.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
-        logo.addView(logoBody, new FrameLayout.LayoutParams(logoW, logoH));
-        android.widget.ImageView logoSun = new android.widget.ImageView(this);
-        logoSun.setImageResource(R.drawable.hemera_logo_sun);
-        logoSun.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
-        logo.addView(logoSun, new FrameLayout.LayoutParams(logoW, logoH));
-        FrameLayout.LayoutParams logoParams = new FrameLayout.LayoutParams(logoW, logoH);
-        logoParams.gravity = Gravity.CENTER;
-        splash.addView(logo, logoParams);
-        logo.setAlpha(0f);
-        logo.animate().alpha(1f).setStartDelay(100).setDuration(900).start();
-        logoSun.setAlpha(0f);
-        logoSun.setTranslationY(logoH * 0.35f);
-        logoSun.animate().alpha(1f).translationY(0f).setStartDelay(150).setDuration(1000)
+        LinearLayout brand = new LinearLayout(this);
+        brand.setOrientation(LinearLayout.VERTICAL);
+        brand.setGravity(Gravity.CENTER_HORIZONTAL);
+        brand.setClipChildren(false);
+        int logoW = Math.min(dp(420), Math.round(getResources().getDisplayMetrics().widthPixels * 0.80f));
+        int logoH = Math.round(logoW * 513f / 2001f);
+        android.widget.ImageView logo = new android.widget.ImageView(this);
+        logo.setImageResource(R.drawable.hemera_logo_body);
+        logo.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
+        brand.addView(logo, new LinearLayout.LayoutParams(logoW, logoH));
+
+        View line = new View(this);
+        line.setBackground(new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.TRANSPARENT, Color.parseColor("#C8943C"), Color.parseColor("#F6DC9C"), Color.parseColor("#C8943C"), Color.TRANSPARENT}));
+        LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(Math.round(logoW * 0.65f), dp(2));
+        lineParams.topMargin = dp(4);
+        brand.addView(line, lineParams);
+
+        android.widget.ImageView tag = new android.widget.ImageView(this);
+        tag.setImageResource(R.drawable.hemera_tag);
+        tag.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
+        int tagW = Math.round(logoW * 0.46f);
+        LinearLayout.LayoutParams tagParams = new LinearLayout.LayoutParams(tagW, Math.round(tagW * 31f / 477f));
+        tagParams.topMargin = dp(14);
+        brand.addView(tag, tagParams);
+
+        FrameLayout.LayoutParams brandParams = new FrameLayout.LayoutParams(-2, -2);
+        brandParams.gravity = Gravity.CENTER;
+        splash.addView(brand, brandParams);
+
+        // The reveal: the word is uncovered from the left.
+        android.animation.ValueAnimator reveal = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        reveal.setDuration(1200);
+        reveal.setStartDelay(200);
+        reveal.setInterpolator(new android.view.animation.PathInterpolator(0.6f, 0f, 0.2f, 1f));
+        logo.setClipBounds(new android.graphics.Rect(0, 0, 0, logoH));
+        reveal.addUpdateListener(a -> logo.setClipBounds(new android.graphics.Rect(0, 0,
+                Math.round(logoW * (float) a.getAnimatedValue()), logoH)));
+        reveal.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator an) { logo.setClipBounds(null); }
+        });
+        reveal.start();
+        line.setScaleX(0f);
+        line.animate().scaleX(1f).setStartDelay(1100).setDuration(900)
+                .setInterpolator(new android.view.animation.PathInterpolator(0.6f, 0f, 0.2f, 1f)).start();
+        tag.setAlpha(0f);
+        tag.setScaleX(0.82f);
+        tag.animate().alpha(1f).scaleX(1f).setStartDelay(1600).setDuration(900)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(2f)).start();
 
-        // LIVE with a pulsing green dot, above the logo.
-        int green = Color.rgb(57, 226, 154);
-        LinearLayout live = new LinearLayout(this);
-        live.setOrientation(LinearLayout.HORIZONTAL);
-        live.setGravity(Gravity.CENTER_VERTICAL);
-        View dot = new View(this);
-        android.graphics.drawable.GradientDrawable dotBg = new android.graphics.drawable.GradientDrawable();
-        dotBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
-        dotBg.setColor(green);
-        dot.setBackground(dotBg);
-        live.addView(dot, new LinearLayout.LayoutParams(dp(9), dp(9)));
-        TextView liveText = new TextView(this);
-        liveText.setText("LIVE");
-        liveText.setTextSize(12);
-        liveText.setLetterSpacing(0.16f);
-        liveText.setTextColor(green);
-        liveText.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD));
-        liveText.setIncludeFontPadding(false);
-        LinearLayout.LayoutParams ltp = new LinearLayout.LayoutParams(-2, -2);
-        ltp.leftMargin = dp(8);
-        live.addView(liveText, ltp);
-        FrameLayout.LayoutParams liveParams = new FrameLayout.LayoutParams(-2, -2);
-        liveParams.gravity = Gravity.CENTER;
-        splash.addView(live, liveParams);
-        live.setTranslationY(-dp(86));
-        android.animation.ObjectAnimator dotPulse = android.animation.ObjectAnimator.ofPropertyValuesHolder(dot,
-                android.animation.PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0.35f, 1f),
-                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.35f, 1f),
-                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.35f, 1f));
-        dotPulse.setDuration(1400);
-        dotPulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
-        dotPulse.start();
-
-        // The sync line: USA, then AR, then Ready in green.
-        TextView sync = new TextView(this);
-        sync.setText("Syncing Human Appeal USA…");
-        sync.setTextSize(12);
-        sync.setTextColor(Color.rgb(159, 176, 224));
-        sync.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
-        sync.setGravity(Gravity.CENTER);
-        FrameLayout.LayoutParams syncParams = new FrameLayout.LayoutParams(-1, -2);
-        syncParams.gravity = Gravity.BOTTOM;
-        syncParams.bottomMargin = dp(56);
-        splash.addView(sync, syncParams);
-        mainHandler.postDelayed(() -> sync.setText("Syncing AR…"), 650);
-        mainHandler.postDelayed(() -> { sync.setText("Ready"); sync.setTextColor(green); }, 1300);
+        // The thin gold bar near the bottom.
+        FrameLayout track = new FrameLayout(this);
+        android.graphics.drawable.GradientDrawable trackBg = new android.graphics.drawable.GradientDrawable();
+        trackBg.setColor(Color.argb(36, 255, 255, 255));
+        trackBg.setCornerRadius(dp(2));
+        track.setBackground(trackBg);
+        track.setClipToOutline(true);
+        View fill = new View(this);
+        android.graphics.drawable.GradientDrawable fillBg = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.parseColor("#C8943C"), Color.parseColor("#F6DC9C")});
+        fillBg.setCornerRadius(dp(2));
+        fill.setBackground(fillBg);
+        fill.setPivotX(0f);
+        fill.setScaleX(0f);
+        track.addView(fill, new FrameLayout.LayoutParams(-1, -1));
+        FrameLayout.LayoutParams trackParams = new FrameLayout.LayoutParams(dp(190), dp(2));
+        trackParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        trackParams.bottomMargin = dp(64);
+        splash.addView(track, trackParams);
+        fill.animate().scaleX(1f).setStartDelay(300).setDuration(1900)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
 
         // The bar is not shown, but the hand-over code still fills it.
         splashFill = new View(this);

@@ -52,7 +52,7 @@ public class SeknaOfflineView extends FrameLayout {
     public SeknaOfflineView(Context context, Runnable onRetry) {
         super(context);
         this.onRetry = onRetry;
-        setBackgroundColor(NAVY);
+        setBackground(new HemeraBg());
         setClickable(true);
 
         aurora = new AuroraView(context);
@@ -297,7 +297,7 @@ public class SeknaOfflineView extends FrameLayout {
             for (float y = 0; y < h; y += step) c.drawLine(0, y, w, y, grid);
             blob(c, w * (0.05f + 0.25f * t), h * (0.08f + 0.18f * t), w * 0.75f, Color.rgb(61, 107, 255), 170);
             blob(c, w * (0.95f - 0.3f * t), h * (0.88f - 0.22f * t), w * 0.6f, GOLD, 90);
-            blob(c, w * (0.15f + 0.2f * t), h * (1.02f - 0.08f * t), w * 0.6f, Color.rgb(32, 60, 142), 200);
+            blob(c, w * (0.15f + 0.2f * t), h * (1.02f - 0.08f * t), w * 0.6f, Color.rgb(28, 76, 175), 110);
         }
     }
 

@@ -14,7 +14,7 @@ import android.widget.TextView;
 public class SeknaLockView extends FrameLayout {
     public SeknaLockView(Context context, Runnable onUnlock) {
         super(context);
-        setBackgroundColor(Color.WHITE);
+        setBackground(new HemeraBg());
         setClickable(true);
         setFocusable(true);
 
@@ -26,13 +26,13 @@ public class SeknaLockView extends FrameLayout {
         box.setPadding(pad, pad, pad, pad);
 
         ImageView logo = new ImageView(context);
-        logo.setImageResource(R.drawable.sekna_logo);
+        logo.setImageResource(R.drawable.sekna_logo_white);
         logo.setAdjustViewBounds(true);
         box.addView(logo, new LinearLayout.LayoutParams(Math.round(150 * density), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         TextView title = new TextView(context);
         title.setText("HEMERA is locked");
-        title.setTextColor(SeknaProgressBar.NAVY);
+        title.setTextColor(Color.WHITE);
         title.setTextSize(19);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setGravity(Gravity.CENTER);
@@ -43,7 +43,7 @@ public class SeknaLockView extends FrameLayout {
 
         TextView sub = new TextView(context);
         sub.setText("Unlock with your fingerprint, face or phone PIN.");
-        sub.setTextColor(Color.rgb(107, 115, 133));
+        sub.setTextColor(Color.rgb(201, 211, 245));
         sub.setTextSize(13);
         sub.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams subParams = new LinearLayout.LayoutParams(
@@ -53,12 +53,12 @@ public class SeknaLockView extends FrameLayout {
 
         TextView unlock = new TextView(context);
         unlock.setText("Unlock");
-        unlock.setTextColor(Color.WHITE);
+        unlock.setTextColor(Color.rgb(15, 31, 82));
         unlock.setTextSize(15);
         unlock.setTypeface(Typeface.DEFAULT_BOLD);
         unlock.setGravity(Gravity.CENTER);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(SeknaProgressBar.NAVY);
+        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.rgb(226, 184, 116), Color.rgb(243, 215, 159)});
         bg.setCornerRadius(14 * density);
         unlock.setBackground(bg);
         unlock.setOnClickListener(v -> onUnlock.run());

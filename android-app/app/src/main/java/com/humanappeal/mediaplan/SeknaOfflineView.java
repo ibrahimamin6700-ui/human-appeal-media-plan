@@ -35,8 +35,10 @@ public class SeknaOfflineView extends FrameLayout {
     private static final int MIST = Color.rgb(201, 211, 245);
     private static final int ALERT = Color.rgb(255, 143, 154);
 
-    // The gold bar inside the "E" of the 667×171 logo (the sun rays of the R sit above the letters).
-    private static final float BAR_L = 134f / 667f, BAR_T = 75f / 171f, BAR_W = 82f / 667f, BAR_H = 22f / 171f;
+    // The gold bar of the "E" in the 1334×342 HEMERA logo: a slanted bar whose top edge starts 28% in
+    // and whose bottom edge ends 74% across.
+    private static final float BAR_L = 542f / 1334f, BAR_T = 156f / 342f, BAR_W = 206f / 1334f, BAR_H = 59f / 342f;
+    private static final float BAR_TOP_FROM = 0.28f, BAR_BOTTOM_TO = 0.74f;
 
     private final Runnable onRetry;
     private final AuroraView aurora;
@@ -88,7 +90,7 @@ public class SeknaOfflineView extends FrameLayout {
         titleParams.topMargin = dp(8);
         content.addView(title, titleParams);
 
-        TextView message = text(context, "We'll keep trying in the background. HEMERA updates the moment you're back online.", 14, MIST, false);
+        TextView message = text(context, "We'll update when you're back online.", 14, MIST, false);
         message.setLineSpacing(dp(3), 1f);
         LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(dp(290), LinearLayout.LayoutParams.WRAP_CONTENT);
         messageParams.topMargin = dp(10);
@@ -308,6 +310,7 @@ public class SeknaOfflineView extends FrameLayout {
         private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint sweep = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF r = new RectF();
+        private final android.graphics.Path barPath = new android.graphics.Path();
         private long start = 0;
         private ValueAnimator animator;
 
@@ -367,7 +370,13 @@ public class SeknaOfflineView extends FrameLayout {
             }
             bar.setShader(new LinearGradient(0, r.top, 0, r.bottom, GOLD_LIGHT, GOLD_DEEP, Shader.TileMode.CLAMP));
             bar.setAlpha(on ? 255 : 38);
-            c.drawRoundRect(r, 3 * d, 3 * d, bar);
+            barPath.reset();
+            barPath.moveTo(r.left + r.width() * BAR_TOP_FROM, r.top);
+            barPath.lineTo(r.right, r.top);
+            barPath.lineTo(r.left + r.width() * BAR_BOTTOM_TO, r.bottom);
+            barPath.lineTo(r.left, r.bottom);
+            barPath.close();
+            c.drawPath(barPath, bar);
         }
     }
 }

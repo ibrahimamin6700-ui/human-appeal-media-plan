@@ -22,6 +22,7 @@ public final class SeknaNotifications {
     public static final int ACCESS_ID = 2205;
     public static final int TASKS_ID = 2206;
     public static final int GREETING_ID = 2207;
+    public static final int SEASON_ID = 2208;
     public static final String EXTRA_OPEN_TASKS = "open_tasks";
     public static final String EXTRA_CHECK_UPDATE = "check_app_update";
 

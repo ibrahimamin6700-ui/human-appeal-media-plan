@@ -81,6 +81,11 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
             SeknaNotifications.showPicture(this, SeknaNotifications.GREETING_ID, title, body, data == null ? null : data.get("image"));
             return;
         }
+        // A season reminder (days before it starts) shows the season's picture too.
+        if ("season".equals(eventType) && data != null && data.get("image") != null && !data.get("image").isEmpty()) {
+            SeknaNotifications.showPicture(this, SeknaNotifications.SEASON_ID, title, body, data.get("image"));
+            return;
+        }
         if ("app_update".equals(eventType)) {
             SeknaNotifications.show(this, SeknaNotifications.APP_UPDATE_ID, title, body, true);
             return;

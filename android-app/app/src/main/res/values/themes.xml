@@ -9,5 +9,6 @@
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <item name="android:colorAccent">@color/ha_purple</item>
+        <item name="android:windowBackground">@color/sekna_splash_navy</item>
     </style>
 </resources>

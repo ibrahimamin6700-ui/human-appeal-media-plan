@@ -4,6 +4,7 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.KeyguardManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.job.JobScheduler;
@@ -12,17 +13,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.drawable.ClipDrawable;
-import android.graphics.drawable.Drawable;
-import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.LayerDrawable;
+import android.hardware.biometrics.BiometricManager;
+import android.hardware.biometrics.BiometricPrompt;
 import android.net.Uri;
 import android.provider.Settings;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Base64;
@@ -38,9 +37,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -60,6 +57,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
+    // The app shows the SEKNA web app, so design changes reach the phone without an app update.
+    // SERVER_API_URL is the SEKNA server the background workers ask; DASHBOARD_URL (Apps Script) is its backup.
+    public static final String WEB_APP_URL = "https://sekna-app.web.app/";
+    public static final String SERVER_API_URL = "https://europe-west2-human-appeal-media-plan.cloudfunctions.net/api";
     public static final String DASHBOARD_URL = "https://script.google.com/macros/s/AKfycbzjgZ1nXxLTcFdeFCIEznOj2H0XCo9YGUeu1YF2pJdsQiOo_aM-Mn6HxKKNk8peEuM1Ig/exec";
     public static final String CHANNEL_ID = "media_plan_updates_v2";
     public static final String EXTRA_OPEN_ACCOUNT = "open_account";
@@ -71,20 +72,43 @@ public class MainActivity extends Activity {
     private String pendingOpenAk = null;
 
     private static final String LATEST_RELEASE_API = "https://api.github.com/repos/ibrahimamin6700-ui/human-appeal-media-plan/releases/latest";
-    private static final String APK_ASSET_NAME = "Human-Appeal-Media-Plan.apk";
+    private static final String RELEASES_PAGE = "https://github.com/ibrahimamin6700-ui/human-appeal-media-plan/releases/latest";
+    // The update itself downloads from the HEMERA website (lighter than GitHub); GitHub only tells which version is out.
+    private static final String WEB_APK = "https://sekna-app.web.app/get/HEMERA.apk";
+    private static final String APK_ASSET_NAME = "HEMERA.apk";
+    private static final String OLD_APK_ASSET_NAME = "SEKNA.apk";
+    private static final String LEGACY_APK_ASSET_NAME = "Human-Appeal-Media-Plan.apk";
+    private static final int UNLOCK_REQUEST = 1302;
+    // SEKNA locks again after this long in the background.
+    private static final long LOCK_AFTER_MS = 30_000L;
     private static final int LEGACY_SYNC_JOB_ID = 12026;
+    private static final int FILE_CHOOSER_REQUEST = 1301;
+    // The SEKNA splash lives in the dashboard. Until its page draws, the app shows the same
+    // glow and logo, then hands over to it without a visible change.
+    private static final int SPLASH_CENTER = Color.rgb(22, 48, 127);
+    private static final int SPLASH_MID = Color.rgb(15, 33, 99);
+    private static final int SPLASH_EDGE = Color.rgb(10, 21, 68);
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private FrameLayout rootView;
     private WebView webView;
-    private ProgressBar loadProgress;
     private View splashView;
-    private View offlineView;
+    private View splashFill;
+    // The opening screen is only a look: it stays for this long whatever the network does, then fades.
+    private static final long SPLASH_MS = 2300L;
+    private long splashShownAt = 0L;
+    private SeknaOfflineView offlineView;
     private boolean dashboardReady = false;
     private boolean mainFrameLoadFailed = false;
     private boolean servicesInitialized = false;
-    private long splashStartedAt = 0L;
     private String pendingOpenAccount = null;
+    private ValueCallback<Uri[]> filePathCallback;
+    private SeknaLockView lockView;
+    private boolean authInProgress = false;
+    private long backgroundedAt = 0L;
+    private Runnable authSuccess;
+    private Runnable authFailure;
+    private boolean updateDialogShown = false;
 
     @Override
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
@@ -111,7 +135,7 @@ public class MainActivity extends Activity {
         }
 
         webView.setVisibility(View.VISIBLE);
-        webView.setBackgroundColor(Color.WHITE);
+        webView.setBackgroundColor(HumanAppealApp.darkMode(this) ? Color.rgb(5, 6, 8) : Color.rgb(244, 246, 251));
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.setVerticalScrollBarEnabled(false);
         webView.setHorizontalScrollBarEnabled(false);
@@ -124,7 +148,10 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(rootView);
-        splashStartedAt = System.currentTimeMillis();
+        if (HumanAppealApp.appLockEnabled(this)) {
+            showLock();
+            mainHandler.postDelayed(this::requestUnlock, 450);
+        }
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -138,9 +165,11 @@ public class MainActivity extends Activity {
         settings.setSupportZoom(false);
         settings.setTextZoom(100);
         settings.setMediaPlaybackRequiresUserGesture(false);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        // Smoother scrolling and taps: the page is drawn ahead of the screen, and the page's
+        // renderer keeps its priority while the app is in front.
+        settings.setOffscreenPreRaster(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
         }
 
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidShare");
@@ -169,6 +198,7 @@ public class MainActivity extends Activity {
                     int shown = Math.max(7, Math.min(progress, 96));
                     loadProgress.setProgress(shown, true);
                 }
+                return true;
             }
         });
 
@@ -190,9 +220,13 @@ public class MainActivity extends Activity {
 
                 webView.setVisibility(View.VISIBLE);
                 hideOfflineScreen();
-                hideGoogleHostUi();
-                mainHandler.postDelayed(MainActivity.this::hideGoogleHostUi, 250);
-                mainHandler.postDelayed(MainActivity.this::hideGoogleHostUi, 900);
+                // Only the old Apps Script page has Google's frame to tidy; on the SEKNA web app this
+                // scan of every block re-laid out the page three times and made it stutter on open.
+                if (isAppsScriptPage(url)) {
+                    hideGoogleHostUi();
+                    mainHandler.postDelayed(MainActivity.this::hideGoogleHostUi, 250);
+                    mainHandler.postDelayed(MainActivity.this::hideGoogleHostUi, 900);
+                }
                 mainHandler.postDelayed(MainActivity.this::applyPendingAccount, 1150);
                 mainHandler.postDelayed(() -> {
                     if (!dashboardReady) hideSplash();
@@ -215,7 +249,8 @@ public class MainActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 String host = uri.getHost() == null ? "" : uri.getHost();
-                if (host.endsWith("google.com") || host.endsWith("googleusercontent.com")) {
+                if (host.equals("sekna-app.web.app") || host.equals("sekna-app.firebaseapp.com")
+                        || host.endsWith("google.com") || host.endsWith("googleusercontent.com")) {
                     return false;
                 }
                 try {
@@ -229,140 +264,317 @@ public class MainActivity extends Activity {
 
         if (savedInstanceState == null) {
             mainFrameLoadFailed = false;
-            webView.loadUrl(DASHBOARD_URL);
+            webView.loadUrl(WEB_APP_URL);
         } else {
             try {
                 webView.restoreState(savedInstanceState);
             } catch (Throwable ignored) {
                 mainFrameLoadFailed = false;
-                webView.loadUrl(DASHBOARD_URL);
+                webView.loadUrl(WEB_APP_URL);
             }
         }
 
-        mainHandler.postDelayed(this::checkForGitHubUpdate, 6500);
+        boolean openedForUpdate = getIntent() != null
+                && getIntent().getBooleanExtra(SeknaNotifications.EXTRA_CHECK_UPDATE, false);
+        mainHandler.postDelayed(() -> checkForGitHubUpdate(false), openedForUpdate ? 2500 : 6500);
     }
 
+    /* ---------- App lock (fingerprint, face or phone PIN) ---------- */
+
+    private void showLock() {
+        if (rootView == null) return;
+        if (lockView == null) {
+            lockView = new SeknaLockView(this, this::requestUnlock);
+            rootView.addView(lockView, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT));
+        }
+        lockView.setVisibility(View.VISIBLE);
+        lockView.bringToFront();
+    }
+
+    private void hideLock() {
+        if (lockView != null) lockView.setVisibility(View.GONE);
+    }
+
+    private boolean isLocked() {
+        return lockView != null && lockView.getVisibility() == View.VISIBLE;
+    }
+
+    private boolean deviceIsSecure() {
+        KeyguardManager keyguard = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        return keyguard != null && keyguard.isDeviceSecure();
+    }
+
+    private void requestUnlock() {
+        if (!isLocked() || authInProgress) return;
+        if (!deviceIsSecure()) {
+            // The phone no longer has a screen lock, so the app lock cannot work: turn it off.
+            HumanAppealApp.setAppLockEnabled(this, false);
+            hideLock();
+            return;
+        }
+        authenticate("Unlock HEMERA", this::hideLock, null);
+    }
+
+    /** Asks for the fingerprint / face, with the phone PIN, pattern or password as a fallback. */
+    private void authenticate(String title, Runnable onSuccess, Runnable onFailure) {
+        authSuccess = onSuccess;
+        authFailure = onFailure;
+        authInProgress = true;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                BiometricPrompt.Builder builder = new BiometricPrompt.Builder(this)
+                        .setTitle(title)
+                        .setSubtitle("Use your fingerprint, face or phone PIN");
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    builder.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK
+                            | BiometricManager.Authenticators.DEVICE_CREDENTIAL);
+                } else {
+                    builder.setDeviceCredentialAllowed(true);
+                }
+                builder.build().authenticate(new CancellationSignal(), getMainExecutor(),
+                        new BiometricPrompt.AuthenticationCallback() {
+                            @Override
+                            public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                                finishAuth(true);
+                            }
+
+                            @Override
+                            public void onAuthenticationError(int errorCode, CharSequence errString) {
+                                finishAuth(false);
+                            }
+                        });
+            } else {
+                KeyguardManager keyguard = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+                Intent intent = keyguard == null ? null
+                        : keyguard.createConfirmDeviceCredentialIntent(title, "Use your phone PIN, pattern or password");
+                if (intent == null) {
+                    finishAuth(true);
+                } else {
+                    startActivityForResult(intent, UNLOCK_REQUEST);
+                }
+            }
+        } catch (Throwable error) {
+            finishAuth(false);
+        }
+    }
+
+    private void finishAuth(boolean success) {
+        authInProgress = false;
+        backgroundedAt = 0L;
+        Runnable next = success ? authSuccess : authFailure;
+        authSuccess = null;
+        authFailure = null;
+        if (next != null) runOnUiThread(next);
+    }
+
+    private void reportAppLock(boolean enabled, String message) {
+        try {
+            String js = "(function(){try{if(window.onSeknaAppLock)window.onSeknaAppLock(" + enabled + ","
+                    + (message == null ? "null" : JSONObject.quote(message)) + ");}catch(e){}})();";
+            runOnUiThread(() -> {
+                if (webView != null) webView.evaluateJavascript(js, null);
+            });
+        } catch (Throwable ignored) {}
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (backgroundedAt > 0 && !authInProgress && HumanAppealApp.appLockEnabled(this)
+                && System.currentTimeMillis() - backgroundedAt >= LOCK_AFTER_MS) {
+            showLock();
+            mainHandler.postDelayed(this::requestUnlock, 250);
+        }
+        backgroundedAt = 0L;
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (!authInProgress && !isChangingConfigurations()) backgroundedAt = System.currentTimeMillis();
+    }
+
+    // Same look as the dashboard splash ("Reveal"): the new HEMERA logo on its own blue lit from above
+    // with a touch of gold; the word is uncovered left to right, the gold line draws out from the
+    // middle, DAY BY DAY opens out, and a thin gold bar fills near the bottom.
     private View buildSplashView() {
         FrameLayout splash = new FrameLayout(this);
-        splash.setBackgroundColor(Color.rgb(250, 248, 253));
-
-        ImageView image = new ImageView(this);
-        Bitmap splashBitmap = loadBase64Bitmap(
-                R.raw.human_appeal_splash_b64,
-                R.raw.human_appeal_splash_b64_2,
-                R.raw.human_appeal_splash_b64_3,
-                R.raw.human_appeal_splash_b64_4,
-                R.raw.human_appeal_splash_b64_5,
-                R.raw.human_appeal_splash_b64_6,
-                R.raw.human_appeal_splash_b64_7,
-                R.raw.human_appeal_splash_b64_8);
-        if (splashBitmap != null) {
-            image.setImageBitmap(splashBitmap);
-        } else {
-            image.setImageResource(R.drawable.ic_launcher);
-        }
-        image.setBackgroundColor(Color.rgb(250, 248, 253));
-        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        splash.addView(image, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-
-        loadProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        loadProgress.setMax(100);
-        loadProgress.setProgress(7);
-        loadProgress.setIndeterminate(false);
-        loadProgress.setProgressDrawable(buildGlossyProgressDrawable());
-        loadProgress.setElevation(dp(9));
-
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(270), dp(17));
-        progressParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        progressParams.bottomMargin = dp(170);
-        splash.addView(loadProgress, progressParams);
-
-        TextView loadingText = new TextView(this);
-        loadingText.setText("Loading Media Plan...");
-        loadingText.setTextSize(12);
-        loadingText.setTextColor(Color.rgb(103, 68, 135));
-        loadingText.setGravity(Gravity.CENTER);
-        loadingText.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
-        FrameLayout.LayoutParams textParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT);
-        textParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        textParams.bottomMargin = dp(138);
-        splash.addView(loadingText, textParams);
-
-        splash.post(() -> {
-            if (loadProgress == null || splash.getHeight() <= 0) return;
-            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) loadProgress.getLayoutParams();
-            int desired = Math.round(splash.getHeight() * 0.22f);
-            int progressBottom = Math.max(dp(135), Math.min(desired, dp(230)));
-            params.bottomMargin = progressBottom;
-            loadProgress.setLayoutParams(params);
-
-            FrameLayout.LayoutParams labelParams =
-                    (FrameLayout.LayoutParams) loadingText.getLayoutParams();
-            labelParams.bottomMargin = Math.max(dp(104), progressBottom - dp(32));
-            loadingText.setLayoutParams(labelParams);
+        android.graphics.drawable.GradientDrawable base = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.rgb(11, 42, 120), Color.rgb(10, 29, 98), Color.rgb(8, 22, 80), Color.rgb(6, 15, 56)});
+        android.graphics.drawable.GradientDrawable topLight = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(240, 28, 76, 175), Color.TRANSPARENT});
+        topLight.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+        topLight.setGradientCenter(0.5f, 0f);
+        android.graphics.drawable.GradientDrawable goldLight = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(34, 226, 184, 116), Color.TRANSPARENT});
+        goldLight.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+        goldLight.setGradientCenter(0.92f, 0.4f);
+        splash.setBackground(new android.graphics.drawable.LayerDrawable(
+                new android.graphics.drawable.Drawable[]{base, topLight, goldLight}));
+        splash.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            int w = r - l, h = b - t;
+            if (w > 0) { topLight.setGradientRadius(Math.max(w, h) * 0.55f); goldLight.setGradientRadius(w * 0.45f); }
         });
 
+        LinearLayout brand = new LinearLayout(this);
+        brand.setOrientation(LinearLayout.VERTICAL);
+        brand.setGravity(Gravity.CENTER_HORIZONTAL);
+        brand.setClipChildren(false);
+        int logoW = Math.min(dp(420), Math.round(getResources().getDisplayMetrics().widthPixels * 0.80f));
+        int logoH = Math.round(logoW * 513f / 2001f);
+        android.widget.ImageView logo = new android.widget.ImageView(this);
+        logo.setImageResource(R.drawable.hemera_logo_body);
+        logo.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
+        brand.addView(logo, new LinearLayout.LayoutParams(logoW, logoH));
+
+        View line = new View(this);
+        line.setBackground(new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.TRANSPARENT, Color.parseColor("#C8943C"), Color.parseColor("#F6DC9C"), Color.parseColor("#C8943C"), Color.TRANSPARENT}));
+        LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(Math.round(logoW * 0.65f), dp(2));
+        lineParams.topMargin = dp(4);
+        brand.addView(line, lineParams);
+
+        android.widget.ImageView tag = new android.widget.ImageView(this);
+        tag.setImageResource(R.drawable.hemera_tag);
+        tag.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
+        int tagW = Math.round(logoW * 0.46f);
+        LinearLayout.LayoutParams tagParams = new LinearLayout.LayoutParams(tagW, Math.round(tagW * 31f / 477f));
+        tagParams.topMargin = dp(14);
+        brand.addView(tag, tagParams);
+
+        FrameLayout.LayoutParams brandParams = new FrameLayout.LayoutParams(-2, -2);
+        brandParams.gravity = Gravity.CENTER;
+        splash.addView(brand, brandParams);
+
+        // The reveal: the word is uncovered from the left.
+        android.animation.ValueAnimator reveal = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        reveal.setDuration(1200);
+        reveal.setStartDelay(200);
+        reveal.setInterpolator(new android.view.animation.PathInterpolator(0.6f, 0f, 0.2f, 1f));
+        logo.setClipBounds(new android.graphics.Rect(0, 0, 0, logoH));
+        reveal.addUpdateListener(a -> logo.setClipBounds(new android.graphics.Rect(0, 0,
+                Math.round(logoW * (float) a.getAnimatedValue()), logoH)));
+        reveal.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator an) { logo.setClipBounds(null); }
+        });
+        reveal.start();
+        line.setScaleX(0f);
+        line.animate().scaleX(1f).setStartDelay(1100).setDuration(900)
+                .setInterpolator(new android.view.animation.PathInterpolator(0.6f, 0f, 0.2f, 1f)).start();
+        tag.setAlpha(0f);
+        tag.setScaleX(0.82f);
+        tag.animate().alpha(1f).scaleX(1f).setStartDelay(1600).setDuration(900)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(2f)).start();
+
+        // The thin gold bar near the bottom.
+        FrameLayout track = new FrameLayout(this);
+        android.graphics.drawable.GradientDrawable trackBg = new android.graphics.drawable.GradientDrawable();
+        trackBg.setColor(Color.argb(36, 255, 255, 255));
+        trackBg.setCornerRadius(dp(2));
+        track.setBackground(trackBg);
+        track.setClipToOutline(true);
+        View fill = new View(this);
+        android.graphics.drawable.GradientDrawable fillBg = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.parseColor("#C8943C"), Color.parseColor("#F6DC9C")});
+        fillBg.setCornerRadius(dp(2));
+        fill.setBackground(fillBg);
+        fill.setPivotX(0f);
+        fill.setScaleX(0f);
+        track.addView(fill, new FrameLayout.LayoutParams(-1, -1));
+        FrameLayout.LayoutParams trackParams = new FrameLayout.LayoutParams(dp(190), dp(2));
+        trackParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        trackParams.bottomMargin = dp(64);
+        splash.addView(track, trackParams);
+        fill.animate().scaleX(1f).setStartDelay(300).setDuration(1900)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
+
+        // The bar is not shown, but the hand-over code still fills it.
+        splashFill = new View(this);
+
+        splash.setClipChildren(false);
+        splashShownAt = android.os.SystemClock.uptimeMillis();
+        mainHandler.postDelayed(this::fadeSplashLook, SPLASH_MS);
         return splash;
     }
 
-    private Drawable buildGlossyProgressDrawable() {
-        GradientDrawable track = new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.rgb(255, 255, 255), Color.rgb(239, 231, 249)});
-        track.setCornerRadius(dp(20));
-        track.setStroke(dp(1), Color.argb(110, 111, 45, 189));
-
-        GradientDrawable fill = new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.rgb(173, 108, 238), Color.rgb(111, 45, 189), Color.rgb(89, 27, 164)});
-        fill.setCornerRadius(dp(20));
-        fill.setStroke(dp(1), Color.argb(145, 255, 255, 255));
-
-        ClipDrawable clippedFill = new ClipDrawable(fill, Gravity.LEFT, ClipDrawable.HORIZONTAL);
-        LayerDrawable layers = new LayerDrawable(new Drawable[]{track, clippedFill});
-        layers.setId(0, android.R.id.background);
-        layers.setId(1, android.R.id.progress);
-        return layers;
+    private View softLight(int color, int radius) {
+        View v = new View(this);
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, new int[]{color, Color.TRANSPARENT});
+        g.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+        g.setGradientRadius(radius);
+        g.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        v.setBackground(g);
+        return v;
     }
 
-    private Bitmap loadBase64Bitmap(int... rawResourceIds) {
-        try {
-            StringBuilder encoded = new StringBuilder();
-            for (int rawResourceId : rawResourceIds) {
-                try (InputStream input = getResources().openRawResource(rawResourceId);
-                     BufferedReader reader = new BufferedReader(
-                             new InputStreamReader(input, StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) encoded.append(line.trim());
-                }
-            }
-            byte[] bytes = Base64.decode(encoded.toString(), Base64.DEFAULT);
-            return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-        } catch (Throwable ignored) {
-            return null;
+    private View goldLine(boolean flip) {
+        View v = new View(this);
+        v.setBackground(new android.graphics.drawable.GradientDrawable(
+                flip ? android.graphics.drawable.GradientDrawable.Orientation.RIGHT_LEFT : android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.TRANSPARENT, Color.rgb(226, 184, 116)}));
+        return v;
+    }
+
+    // A slow breath: the light grows and brightens, then fades back, every 3.6 seconds.
+    private void breathe(View v, long delay) {
+        android.animation.ObjectAnimator a = android.animation.ObjectAnimator.ofPropertyValuesHolder(v,
+                android.animation.PropertyValuesHolder.ofFloat(View.ALPHA, 0.35f, 1f, 0.35f),
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 0.85f, 1.08f, 0.85f),
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.85f, 1.08f, 0.85f));
+        a.setDuration(3600);
+        a.setStartDelay(delay);
+        a.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        a.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        v.setAlpha(0.35f);
+        v.setScaleX(0.85f);
+        v.setScaleY(0.85f);
+        a.start();
+    }
+
+    // Fades the opening screen after its fixed time, without waiting for the page.
+    private void fadeSplashLook() {
+        if (splashView == null || splashView.getVisibility() != View.VISIBLE) return;
+        if (splashFill != null) splashFill.animate().cancel();
+        if (splashFill != null) splashFill.animate().scaleX(1f).setDuration(220).start();
+        splashView.animate()
+                .setStartDelay(200)
+                .alpha(0f)
+                .setDuration(260)
+                .withEndAction(() -> splashView.setVisibility(View.GONE))
+                .start();
+    }
+
+    // The dashboard's own splash is on screen: drop the native cover (once its fixed time is up).
+    private void hideSplashCover() {
+        if (android.os.SystemClock.uptimeMillis() - splashShownAt < SPLASH_MS) return;
+        if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
+            splashView.animate().alpha(0f).setDuration(180)
+                    .withEndAction(() -> splashView.setVisibility(View.GONE)).start();
         }
     }
 
     private void hideSplash() {
         if (dashboardReady && (splashView == null || splashView.getVisibility() != View.VISIBLE)) return;
 
-        long elapsed = System.currentTimeMillis() - splashStartedAt;
-        if (elapsed < 650) {
-            mainHandler.postDelayed(this::hideSplash, 650 - elapsed);
-            return;
-        }
-
         dashboardReady = true;
-        if (loadProgress != null) loadProgress.setProgress(100, true);
 
-        if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
+        if (splashView != null && splashView.getVisibility() == View.VISIBLE
+                && android.os.SystemClock.uptimeMillis() - splashShownAt >= SPLASH_MS) {
+            // The bar fills up first, then the opening screen fades into the dashboard.
+            if (splashFill != null) splashFill.animate().cancel();
+            if (splashFill != null) splashFill.animate().scaleX(1f).setDuration(220).start();
             splashView.animate()
+                    .setStartDelay(200)
                     .alpha(0f)
-                    .setDuration(380)
+                    .setDuration(260)
                     .withEndAction(() -> splashView.setVisibility(View.GONE))
                     .start();
         }
@@ -373,6 +585,7 @@ public class MainActivity extends Activity {
         }
 
         mainHandler.postDelayed(this::applyPendingAccount, 250);
+        mainHandler.postDelayed(this::applyPendingTasks, 1200);
     }
 
     private void showOfflineScreen() {
@@ -386,91 +599,28 @@ public class MainActivity extends Activity {
             if (webView != null) webView.setVisibility(View.INVISIBLE);
 
             if (offlineView == null) {
-                offlineView = buildOfflineView();
+                offlineView = new SeknaOfflineView(this, this::retryDashboard);
+                offlineView.setVisibility(View.GONE);
                 rootView.addView(offlineView, new FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
             }
-            offlineView.setVisibility(View.VISIBLE);
-            offlineView.setAlpha(1f);
+            if (offlineView.getVisibility() == View.VISIBLE) {
+                offlineView.retryFailed();
+            } else {
+                offlineView.setVisibility(View.VISIBLE);
+                offlineView.setAlpha(1f);
+                offlineView.show();
+            }
             offlineView.bringToFront();
         });
     }
 
     private void hideOfflineScreen() {
-        if (offlineView != null) offlineView.setVisibility(View.GONE);
-    }
-
-    private View buildOfflineView() {
-        LinearLayout screen = new LinearLayout(this);
-        screen.setOrientation(LinearLayout.VERTICAL);
-        screen.setGravity(Gravity.CENTER);
-        screen.setPadding(dp(28), dp(36), dp(28), dp(36));
-        screen.setBackgroundColor(Color.rgb(248, 245, 252));
-
-        ImageView logo = new ImageView(this);
-        Bitmap logoBitmap = loadBase64Bitmap(R.raw.human_appeal_logo_b64);
-        if (logoBitmap != null) logo.setImageBitmap(logoBitmap);
-        else logo.setImageResource(R.drawable.ic_launcher);
-        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(150), dp(82));
-        logoParams.bottomMargin = dp(30);
-        screen.addView(logo, logoParams);
-
-        TextView icon = new TextView(this);
-        icon.setText("!");
-        icon.setTextSize(30);
-        icon.setTextColor(Color.WHITE);
-        icon.setGravity(Gravity.CENTER);
-        icon.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        GradientDrawable iconBg = new GradientDrawable();
-        iconBg.setShape(GradientDrawable.OVAL);
-        iconBg.setColor(Color.rgb(111, 45, 189));
-        icon.setBackground(iconBg);
-        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(66), dp(66));
-        iconParams.bottomMargin = dp(24);
-        screen.addView(icon, iconParams);
-
-        TextView title = new TextView(this);
-        title.setText("No Internet Connection");
-        title.setTextSize(23);
-        title.setTextColor(Color.rgb(34, 30, 42));
-        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        title.setGravity(Gravity.CENTER);
-        screen.addView(title);
-
-        TextView message = new TextView(this);
-        message.setText("Check your connection and try again.\nتحقق من اتصال الإنترنت ثم حاول مرة أخرى.");
-        message.setTextSize(14);
-        message.setTextColor(Color.rgb(115, 106, 126));
-        message.setGravity(Gravity.CENTER);
-        message.setLineSpacing(dp(3), 1f);
-        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        messageParams.topMargin = dp(12);
-        messageParams.bottomMargin = dp(30);
-        screen.addView(message, messageParams);
-
-        TextView retry = new TextView(this);
-        retry.setText("Retry");
-        retry.setTextSize(15);
-        retry.setTextColor(Color.WHITE);
-        retry.setGravity(Gravity.CENTER);
-        retry.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        retry.setPadding(dp(42), dp(13), dp(42), dp(13));
-        GradientDrawable retryBg = new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.rgb(98, 39, 176), Color.rgb(139, 73, 204)});
-        retryBg.setCornerRadius(dp(24));
-        retry.setBackground(retryBg);
-        retry.setElevation(dp(5));
-        retry.setOnClickListener(v -> retryDashboard());
-        screen.addView(retry, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        return screen;
+        if (offlineView != null) {
+            offlineView.hide();
+            offlineView.setVisibility(View.GONE);
+        }
     }
 
     private void retryDashboard() {
@@ -478,8 +628,13 @@ public class MainActivity extends Activity {
         try {
             mainFrameLoadFailed = false;
             webView.stopLoading();
-            webView.loadUrl(DASHBOARD_URL);
+            webView.loadUrl(WEB_APP_URL);
         } catch (Throwable ignored) {}
+    }
+
+    private static boolean isAppsScriptPage(String url) {
+        String u = url == null ? "" : url.toLowerCase();
+        return u.contains("script.google.com") || u.contains("googleusercontent.com");
     }
 
     private void hideGoogleHostUi() {
@@ -510,7 +665,7 @@ public class MainActivity extends Activity {
         box.setBackgroundColor(Color.WHITE);
 
         TextView title = new TextView(this);
-        title.setText("Human Appeal Media Plan");
+        title.setText("HEMERA");
         title.setTextSize(22);
         title.setTextColor(Color.rgb(34, 40, 50));
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -532,7 +687,7 @@ public class MainActivity extends Activity {
 
     private void openDashboardExternally() {
         try {
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(DASHBOARD_URL)));
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(WEB_APP_URL)));
         } catch (Exception ignored) {
             Toast.makeText(this, "Unable to open dashboard", Toast.LENGTH_SHORT).show();
         }
@@ -579,10 +734,23 @@ public class MainActivity extends Activity {
         // Legacy polling intentionally disabled. Firebase is the single notification source.
     }
 
+    /**
+     * Matches the phone's status and navigation bars to the dashboard theme:
+     * white bars with dark icons in light mode, near-black bars in dark mode.
+     * Android 7 cannot draw dark navigation icons, so it keeps a black nav bar.
+     */
+    private Boolean barsDark = null;
+
     private void applySystemBars(boolean dark) {
+        // Only when the theme changes: setting the bars again on every return to the app
+        // re-laid out the whole window and made the page blink.
+        if (barsDark != null && barsDark == dark) return;
+        barsDark = dark;
         try {
-            getWindow().setStatusBarColor(Color.BLACK);
-            getWindow().setNavigationBarColor(Color.BLACK);
+            boolean lightNavIcons = !dark && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
+            getWindow().setStatusBarColor(dark ? Color.rgb(11, 13, 17) : Color.WHITE);
+            getWindow().setNavigationBarColor(dark ? Color.rgb(5, 6, 8)
+                    : lightNavIcons ? Color.rgb(245, 246, 248) : Color.BLACK);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 getWindow().setDecorFitsSystemWindows(true);
@@ -590,10 +758,13 @@ public class MainActivity extends Activity {
                 if (controller != null) {
                     int mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS |
                             WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
-                    controller.setSystemBarsAppearance(0, mask);
+                    controller.setSystemBarsAppearance(dark ? 0 : mask, mask);
                 }
             } else {
-                getWindow().getDecorView().setSystemUiVisibility(0);
+                int flags = 0;
+                if (!dark) flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                if (lightNavIcons) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                getWindow().getDecorView().setSystemUiVisibility(flags);
             }
         } catch (Throwable ignored) {}
     }
@@ -647,6 +818,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void dashboardReady() {
             runOnUiThread(MainActivity.this::hideSplash);
+        }
+
+        @JavascriptInterface
+        public void splashShown() {
+            runOnUiThread(MainActivity.this::hideSplashCover);
         }
 
         @JavascriptInterface
@@ -712,6 +888,64 @@ public class MainActivity extends Activity {
                             Toast.LENGTH_SHORT).show());
                 }
             }).start();
+        }
+
+        @JavascriptInterface
+        public boolean isAppLockEnabled() {
+            return HumanAppealApp.appLockEnabled(getApplicationContext());
+        }
+
+        /** Turning the lock on or off always needs the fingerprint / PIN first. */
+        @JavascriptInterface
+        public void setAppLockEnabled(boolean enabled) {
+            runOnUiThread(() -> {
+                boolean current = HumanAppealApp.appLockEnabled(MainActivity.this);
+                if (enabled && !deviceIsSecure()) {
+                    reportAppLock(false, "Set a screen lock (PIN, pattern or fingerprint) on your phone first.");
+                    return;
+                }
+                if (!enabled && !deviceIsSecure()) {
+                    HumanAppealApp.setAppLockEnabled(MainActivity.this, false);
+                    reportAppLock(false, "App lock is off");
+                    return;
+                }
+                authenticate(enabled ? "Turn on app lock" : "Turn off app lock", () -> {
+                    HumanAppealApp.setAppLockEnabled(MainActivity.this, enabled);
+                    reportAppLock(enabled, enabled ? "App lock is on" : "App lock is off");
+                }, () -> reportAppLock(current, null));
+            });
+        }
+
+        @JavascriptInterface
+        public void watchAccessApproval(String token) {
+            try { AccessApprovalWorker.start(getApplicationContext(), token); } catch (Throwable ignored) {}
+        }
+
+        @JavascriptInterface
+        public void stopAccessWatch() {
+            try { AccessApprovalWorker.stop(getApplicationContext()); } catch (Throwable ignored) {}
+        }
+
+        @JavascriptInterface
+        public String getAppVersion() {
+            return BuildConfig.VERSION_NAME;
+        }
+
+        @JavascriptInterface
+        public void checkForAppUpdate() {
+            checkForGitHubUpdate(true);
+        }
+
+        @JavascriptInterface
+        public void openAppUpdate(String url) {
+            String target = url != null && (url.startsWith("https://sekna-app.web.app/") || url.startsWith("https://github.com/")) ? url : WEB_APK;
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(target)));
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "Unable to open the download", Toast.LENGTH_SHORT).show();
+                }
+            });
         }
 
         @JavascriptInterface
@@ -792,8 +1026,16 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void checkForGitHubUpdate() {
+    /**
+     * Checks GitHub Releases for a newer signed APK. When the dashboard asks
+     * (manual = true) the result is also sent back to the page.
+     */
+    private void checkForGitHubUpdate(boolean manual) {
         new Thread(() -> {
+            String result = "error";
+            String latestShown = "";
+            String pageUrl = WEB_APK;
+            String apkFound = null;
             HttpURLConnection connection = null;
             try {
                 URL url = new URL(LATEST_RELEASE_API);
@@ -801,8 +1043,10 @@ public class MainActivity extends Activity {
                 connection.setConnectTimeout(7000);
                 connection.setReadTimeout(7000);
                 connection.setRequestProperty("Accept", "application/vnd.github+json");
-                connection.setRequestProperty("User-Agent", "Human-Appeal-Media-Plan-Android");
-                if (connection.getResponseCode() != 200) return;
+                connection.setRequestProperty("User-Agent", "HEMERA-Android");
+                int code = connection.getResponseCode();
+                if (code == 404) result = "latest"; // no official release published yet
+                if (code != 200) return;
 
                 BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
                 StringBuilder text = new StringBuilder();
@@ -818,36 +1062,154 @@ public class MainActivity extends Activity {
                 if (assets != null) {
                     for (int i = 0; i < assets.length(); i++) {
                         JSONObject asset = assets.optJSONObject(i);
-                        if (asset != null && APK_ASSET_NAME.equals(asset.optString("name"))) {
+                        String assetName = asset == null ? "" : asset.optString("name");
+                        if (APK_ASSET_NAME.equals(assetName) || OLD_APK_ASSET_NAME.equals(assetName) || LEGACY_APK_ASSET_NAME.equals(assetName)) {
                             apkUrl = asset.optString("browser_download_url", null);
                             break;
                         }
                     }
                 }
+                latestShown = latestTag;
                 if (apkUrl != null && isNewerVersion(latestTag, currentVersion)) {
-                    String finalUrl = apkUrl;
-                    runOnUiThread(() -> showUpdateDialog(latestTag, finalUrl));
+                    // The dashboard shows the update in its own window; see reportUpdateResult.
+                    result = "available";
+                    apkFound = apkUrl;
+                } else {
+                    result = "latest";
                 }
             } catch (Exception ignored) {
             } finally {
                 if (connection != null) connection.disconnect();
+                if (manual || "available".equals(result)) {
+                    reportUpdateResult(result, latestShown, pageUrl, apkFound, !manual);
+                }
             }
         }, "ha-update-check").start();
     }
 
-    private void showUpdateDialog(String version, String apkUrl) {
-        if (isFinishing()) return;
-        new AlertDialog.Builder(this)
-                .setTitle("Update available")
-                .setMessage("Human Appeal Media Plan " + version + " is available on GitHub.")
-                .setNegativeButton("Later", null)
-                .setPositiveButton("Update", (dialog, which) -> {
-                    try {
-                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl)));
-                    } catch (Exception e) {
-                        Toast.makeText(this, "Unable to open GitHub download", Toast.LENGTH_SHORT).show();
+    // Sends the update check to the dashboard. If the page cannot show it (an older page,
+    // or the sign-in screen is open) the plain system prompt is the fallback.
+    private void reportUpdateResult(String status, String latest, String pageUrl, String apkUrl, boolean auto) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("status", status);
+            payload.put("latest", latest);
+            payload.put("current", BuildConfig.VERSION_NAME);
+            payload.put("url", pageUrl);
+            payload.put("auto", auto);
+            String js = "(function(){try{if(window.onSeknaAppUpdate)return window.onSeknaAppUpdate(" + payload + ")===true;}catch(e){}return false;})();";
+            runOnUiThread(() -> {
+                if (webView == null) {
+                    if ("available".equals(status) && apkUrl != null) showUpdateDialog(latest, apkUrl);
+                    return;
+                }
+                webView.evaluateJavascript(js, value -> {
+                    if (!"true".equals(value) && "available".equals(status) && apkUrl != null) {
+                        showUpdateDialog(latest, apkUrl);
                     }
-                }).show();
+                });
+            });
+        } catch (Exception ignored) {
+        }
+    }
+
+    // Update prompt in the SEKNA look: navy card, white logo, gold button.
+    private void showUpdateDialog(String version, String apkUrl) {
+        if (isFinishing() || updateDialogShown) return;
+        updateDialogShown = true;
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER_HORIZONTAL);
+        card.setPadding(dp(24), dp(26), dp(24), dp(20));
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.parseColor("#2F50B5"), Color.parseColor("#152A66"), Color.parseColor("#0C1A46")});
+        bg.setCornerRadius(dp(24));
+        card.setBackground(bg);
+
+        android.widget.ImageView logo = new android.widget.ImageView(this);
+        logo.setImageResource(R.drawable.sekna_logo_white);
+        logo.setAdjustViewBounds(true);
+        card.addView(logo, new LinearLayout.LayoutParams(dp(140), dp(36)));
+
+        TextView badge = new TextView(this);
+        badge.setText("\u2193");
+        badge.setTextSize(20);
+        badge.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        badge.setTextColor(Color.parseColor("#0C1A46"));
+        badge.setGravity(Gravity.CENTER);
+        android.graphics.drawable.GradientDrawable gold = new android.graphics.drawable.GradientDrawable();
+        gold.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        gold.setColor(Color.parseColor("#E2B874"));
+        badge.setBackground(gold);
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(dp(44), dp(44));
+        bp.topMargin = dp(18);
+        card.addView(badge, bp);
+
+        TextView title = new TextView(this);
+        title.setText("HEMERA " + version + " is ready");
+        title.setTextSize(19);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setTextColor(Color.WHITE);
+        title.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-1, -2);
+        tp.topMargin = dp(14);
+        card.addView(title, tp);
+
+        TextView body = new TextView(this);
+        body.setText("You have " + BuildConfig.VERSION_NAME + ". HEMERA.apk downloads from the HEMERA website; open it to install.");
+        body.setTextSize(13);
+        body.setTextColor(Color.parseColor("#C9D3F5"));
+        body.setGravity(Gravity.CENTER);
+        body.setLineSpacing(dp(2), 1f);
+        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, -2);
+        mp.topMargin = dp(6);
+        card.addView(body, mp);
+
+        TextView update = new TextView(this);
+        update.setText("Update to " + version);
+        update.setTextSize(15);
+        update.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        update.setTextColor(Color.parseColor("#0C1A46"));
+        update.setGravity(Gravity.CENTER);
+        android.graphics.drawable.GradientDrawable btn = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.parseColor("#E2B874"), Color.parseColor("#F3D79F")});
+        btn.setCornerRadius(dp(14));
+        update.setBackground(btn);
+        LinearLayout.LayoutParams up = new LinearLayout.LayoutParams(-1, dp(50));
+        up.topMargin = dp(20);
+        card.addView(update, up);
+
+        TextView later = new TextView(this);
+        later.setText("Later");
+        later.setTextSize(14);
+        later.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        later.setTextColor(Color.parseColor("#C9D3F5"));
+        later.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(44));
+        lp.topMargin = dp(4);
+        card.addView(later, lp);
+
+        update.setOnClickListener(v -> {
+            dialog.dismiss();
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(WEB_APK)));
+            } catch (Exception e) {
+                Toast.makeText(this, "Unable to open the download", Toast.LENGTH_SHORT).show();
+            }
+        });
+        later.setOnClickListener(v -> dialog.dismiss());
+        dialog.setContentView(card);
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+            dialog.getWindow().setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(48), dp(360)), -2);
+        }
+        dialog.setOnDismissListener(d -> updateDialogShown = false);
+        dialog.show();
     }
 
     private boolean isNewerVersion(String latest, String current) {
@@ -867,6 +1229,22 @@ public class MainActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == UNLOCK_REQUEST) {
+            finishAuth(resultCode == RESULT_OK);
+            return;
+        }
+        if (requestCode == FILE_CHOOSER_REQUEST) {
+            if (filePathCallback != null) {
+                filePathCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+                filePathCallback = null;
+            }
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override
@@ -916,6 +1294,24 @@ public class MainActivity extends Activity {
         String go = intent == null ? null : intent.getStringExtra(EXTRA_OPEN_GO);
         if (go != null && go.matches("^(ak|ss|tab):[a-z0-9]{1,24}$")) { pendingOpenAk = go; pendingOpenAccount = null; }
         if (dashboardReady) mainHandler.postDelayed(this::applyPendingAccount, 150);
+        if (intent != null && intent.getBooleanExtra(SeknaNotifications.EXTRA_CHECK_UPDATE, false)) {
+            mainHandler.postDelayed(() -> checkForGitHubUpdate(false), 600);
+        }
+        if (intent != null && intent.getBooleanExtra(SeknaNotifications.EXTRA_OPEN_TASKS, false)) {
+            pendingOpenTasks = true;
+            if (dashboardReady) mainHandler.postDelayed(this::applyPendingTasks, 300);
+        }
+    }
+
+    private boolean pendingOpenTasks = false;
+
+    /** A Team Tasks notification opens My Tasks once the dashboard is ready. */
+    private void applyPendingTasks() {
+        if (webView == null || !pendingOpenTasks) return;
+        pendingOpenTasks = false;
+        try {
+            webView.evaluateJavascript("(function(){try{if(typeof openTasks==='function')openTasks('mine');}catch(e){}})();", null);
+        } catch (Throwable ignored) {}
     }
 
     @Override

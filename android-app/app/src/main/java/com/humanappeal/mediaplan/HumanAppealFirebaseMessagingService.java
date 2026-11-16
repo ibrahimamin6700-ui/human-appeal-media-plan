@@ -47,6 +47,8 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
 
         Map<String, String> data = message.getData();
         if (data != null) {
+            String dataEvent = data.get("eventType");
+            if (dataEvent != null) eventType = dataEvent;
             String dataTitle = data.get("title");
             String dataBody = data.get("body");
             String dataAccount = data.get("accountKey");
@@ -91,7 +93,8 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
                     ? new Notification.Builder(this, MainActivity.CHANNEL_ID)
                     : new Notification.Builder(this);
 
-            builder.setSmallIcon(R.drawable.ic_launcher)
+            builder.setSmallIcon(R.drawable.ic_stat_humanappeal)
+                    .setColor(android.graphics.Color.rgb(32, 60, 142))
                     .setContentTitle(title)
                     .setContentText(body)
                     .setStyle(new Notification.BigTextStyle().bigText(body))

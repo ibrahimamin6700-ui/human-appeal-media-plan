@@ -119,6 +119,22 @@ jobs:
           path: HEMERA.apk
           if-no-files-found: error
 
+      # The latest build is also kept on the apk-latest branch, so it can be copied to the HEMERA website
+      # (sekna-app.web.app/get/HEMERA.apk) with plain git.
+      - name: Keep the APK on the apk-latest branch
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          mkdir -p /tmp/apkb && cp HEMERA.apk /tmp/apkb/
+          cd /tmp/apkb
+          git init -q -b apk-latest
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "Built from ${GITHUB_SHA} on ${GITHUB_REF_NAME} (run ${GITHUB_RUN_NUMBER})" > BUILD.txt
+          git add HEMERA.apk BUILD.txt
+          git commit -q -m "HEMERA.apk from ${GITHUB_SHA::7} (run ${GITHUB_RUN_NUMBER})"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" apk-latest
+
       # Only a manual run with a release_version publishes an official release.
       # HEMERA notifies the team about it automatically (Apps Script checks GitHub Releases).
       - name: Publish GitHub Release

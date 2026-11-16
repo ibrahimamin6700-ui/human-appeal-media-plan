@@ -99,7 +99,7 @@ public class MainActivity extends Activity {
     private View splashView;
     private View splashFill;
     // The opening screen is only a look: it stays for this long whatever the network does, then fades.
-    private static final long SPLASH_MS = 2300L;
+    private static final long SPLASH_MS = 1000L; // was 2300: the opening screen goes as soon as the page is ready
     private long splashShownAt = 0L;
     private SeknaOfflineView offlineView;
     private boolean dashboardReady = false;

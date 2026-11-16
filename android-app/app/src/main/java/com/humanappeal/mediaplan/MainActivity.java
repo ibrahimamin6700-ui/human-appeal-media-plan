@@ -58,9 +58,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
-    // one quiet thread for the home-screen widgets, so the page never waits for them
-    private static final java.util.concurrent.ExecutorService WIDGET_IO = java.util.concurrent.Executors.newSingleThreadExecutor();
-
     // The app shows the SEKNA web app, so design changes reach the phone without an app update.
     // SERVER_API_URL is the SEKNA server the background workers ask; DASHBOARD_URL (Apps Script) is its backup.
     public static final String WEB_APP_URL = "https://sekna-app.web.app/";
@@ -99,7 +96,7 @@ public class MainActivity extends Activity {
     private View splashView;
     private View splashFill;
     // The opening screen is only a look: it stays for this long whatever the network does, then fades.
-    private static final long SPLASH_MS = 1000L; // was 2300: the opening screen goes as soon as the page is ready
+    private static final long SPLASH_MS = 2300L;
     private long splashShownAt = 0L;
     private SeknaOfflineView offlineView;
     private boolean dashboardReady = false;
@@ -173,6 +170,7 @@ public class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         // Smoother scrolling and taps: the page is drawn ahead of the screen, and the page's
         // renderer keeps its priority while the app is in front.
+        settings.setOffscreenPreRaster(true);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
         }
@@ -218,13 +216,6 @@ public class MainActivity extends Activity {
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
                 if (!"about:blank".equalsIgnoreCase(url)) mainFrameLoadFailed = false;
-            }
-
-            @Override
-            public void onPageCommitVisible(WebView view, String url) {
-                super.onPageCommitVisible(view, url);
-                // the page has painted: the opening screen may go (it no longer waits for the numbers)
-                if (url != null && url.startsWith(WEB_APP_URL)) pageVisible = true;
             }
 
             @Override
@@ -543,11 +534,10 @@ public class MainActivity extends Activity {
 
     // Fades the opening screen after its fixed time, without waiting for the page.
     private boolean introStarted;
-    private volatile boolean pageVisible;
 
     private void fadeSplashLook() {
         if (splashView == null || splashView.getVisibility() != View.VISIBLE) return;
-        if (!introStarted && !dashboardReady && !pageVisible && android.os.SystemClock.uptimeMillis() - splashShownAt < 8000L) {
+        if (!introStarted && !dashboardReady && android.os.SystemClock.uptimeMillis() - splashShownAt < 8000L) {
             mainHandler.postDelayed(this::fadeSplashLook, 250);
             return;
         }
@@ -867,9 +857,8 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void onWidgetData(String json) {
-            // the page must not wait: the widget work (season picture download, drawing) runs on its own thread
-            final android.content.Context app = getApplicationContext();
-            WIDGET_IO.execute(() -> WidgetKit.save(app, json));
+            // runs off the main thread, so the season picture can be downloaded here
+            WidgetKit.save(getApplicationContext(), json);
         }
 
         @JavascriptInterface

@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">Human Appeal Media Plan</string>
+    <string name="wn_alexandra">Ask Alexandra</string>
+    <string name="wn_value">Conversion value · 14 days</string>
+    <string name="wn_streak">Days above plan</string>
+    <string name="wn_season">Next season</string>
+    <string name="wn_clock">Muscat clock</string>
+    <string name="wd_alexandra">Ask Alexandra, today\'s numbers, sheets and voice</string>
+    <string name="wd_value">Today\'s conversion value and the last 14 days</string>
+    <string name="wd_streak">Days in a row above the plan</string>
+    <string name="wd_season">Days left to the next season</string>
+    <string name="wd_clock">Muscat time with the HEMERA logo and today\'s ROAS</string>
 </resources>

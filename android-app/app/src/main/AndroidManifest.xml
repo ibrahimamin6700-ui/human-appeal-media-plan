@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <queries>
         <package android:name="com.whatsapp" />
@@ -40,6 +43,50 @@
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
+        </service>
+
+        <receiver android:name=".WidgetAlexandra" android:exported="false" android:label="@string/wn_alexandra">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_info_alexandra" />
+        </receiver>
+
+        <receiver android:name=".WidgetValue" android:exported="false" android:label="@string/wn_value">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_info_value" />
+        </receiver>
+
+        <receiver android:name=".WidgetStreak" android:exported="false" android:label="@string/wn_streak">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_info_streak" />
+        </receiver>
+
+        <receiver android:name=".WidgetSeason" android:exported="false" android:label="@string/wn_season">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_info_season" />
+        </receiver>
+
+        <receiver android:name=".WidgetClock" android:exported="false" android:label="@string/wn_clock">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_info_clock" />
+        </receiver>
+
+        <service
+            android:name=".BubbleService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Alexandra chat bubble shown over other apps while she is minimised" />
         </service>
 
         <activity

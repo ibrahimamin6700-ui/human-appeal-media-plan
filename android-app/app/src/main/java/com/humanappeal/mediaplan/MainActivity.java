@@ -20,6 +20,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
+import android.provider.Settings;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -63,6 +64,8 @@ public class MainActivity extends Activity {
     public static final String CHANNEL_ID = "media_plan_updates_v2";
     public static final String EXTRA_OPEN_ACCOUNT = "open_account";
     public static final String EXTRA_OPEN_AK = "open_ak";
+    public static final String EXTRA_OPEN_GO = "open_go";
+    static volatile boolean inFront = false;
     private static final int MIC_PERMISSION_REQUEST = 1203;
     private PermissionRequest pendingMicRequest = null;
     private String pendingOpenAk = null;
@@ -92,6 +95,8 @@ public class MainActivity extends Activity {
                 getIntent() == null ? null : getIntent().getStringExtra(EXTRA_OPEN_ACCOUNT));
         pendingOpenAk = normalizeAk(getIntent() == null ? null : getIntent().getStringExtra(EXTRA_OPEN_AK));
         if (pendingOpenAk != null) pendingOpenAccount = null;
+        String go = getIntent() == null ? null : getIntent().getStringExtra(EXTRA_OPEN_GO);
+        if (go != null && go.matches("^(ak|ss|tab):[a-z0-9]{1,24}$")) { pendingOpenAk = go; pendingOpenAccount = null; }
         applySystemBars(HumanAppealApp.darkMode(this));
 
         rootView = new FrameLayout(this);
@@ -620,7 +625,8 @@ public class MainActivity extends Activity {
         if (webView == null || pendingOpenAk == null) return;
         final String to = pendingOpenAk;
         pendingOpenAk = null;
-        String js = "(function(){var n=0;(function go(){try{if(typeof akOpenFrom==='function'){akOpenFrom('" + to + "');return}}catch(e){}if(++n<20)setTimeout(go,300)})()})();";
+        final String g = to.contains(":") ? to : "ak:" + to;
+        String js = "(function(){var n=0;(function go(){try{if(typeof hmGo==='function'){hmGo('" + g + "');return}if(typeof akOpenFrom==='function'&&'" + g + "'.indexOf('ak:')===0){akOpenFrom('" + g + "'.slice(3)==='req'?'req':'chat');return}}catch(e){}if(++n<20)setTimeout(go,300)})()})();";
         try { webView.evaluateJavascript(js, null); } catch (Throwable ignored) {}
     }
 
@@ -652,6 +658,18 @@ public class MainActivity extends Activity {
                     HumanAppealApp.setLastAccount(getApplicationContext(), account);
                 }
             } catch (Throwable ignored) {}
+        }
+
+        @JavascriptInterface
+        public void onWidgetData(String json) {
+            // runs off the main thread, so the season picture can be downloaded here
+            WidgetKit.save(getApplicationContext(), json);
+        }
+
+        @JavascriptInterface
+        public void setAlexandraBubble(boolean on) {
+            getSharedPreferences(WidgetKit.PREFS, MODE_PRIVATE).edit().putBoolean("bub_on", on).apply();
+            if (on) runOnUiThread(MainActivity.this::askOverlayOnce);
         }
 
         @JavascriptInterface
@@ -854,7 +872,37 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        inFront = true;
+        if (BubbleService.running) BubbleService.stop(this);
         applySystemBars(HumanAppealApp.darkMode(this));
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        inFront = false;
+        // Alexandra was minimised to her bubble: keep it on the screen over other apps
+        try {
+            boolean on = getSharedPreferences(WidgetKit.PREFS, MODE_PRIVATE).getBoolean("bub_on", false);
+            if (on && !isFinishing()) BubbleService.start(this);
+        } catch (Throwable ignored) {}
+    }
+
+    private void askOverlayOnce() {
+        if (Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this)) return;
+        android.content.SharedPreferences p = getSharedPreferences(WidgetKit.PREFS, MODE_PRIVATE);
+        if (p.getBoolean("bub_asked", false)) return;
+        p.edit().putBoolean("bub_asked", true).apply();
+        try {
+            new AlertDialog.Builder(this)
+                    .setTitle("Keep Alexandra on your screen?")
+                    .setMessage("Allow HEMERA to show over other apps, and Alexandra's bubble stays with you when you leave the app. Tap it to chat, or drag it to the X to close it.")
+                    .setPositiveButton("Allow", (d, w) -> {
+                        try { startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))); } catch (Throwable ignored) {}
+                    })
+                    .setNegativeButton("Not now", null)
+                    .show();
+        } catch (Throwable ignored) {}
     }
 
     @Override
@@ -865,6 +913,8 @@ public class MainActivity extends Activity {
                 intent == null ? null : intent.getStringExtra(EXTRA_OPEN_ACCOUNT));
         pendingOpenAk = normalizeAk(intent == null ? null : intent.getStringExtra(EXTRA_OPEN_AK));
         if (pendingOpenAk != null) pendingOpenAccount = null;
+        String go = intent == null ? null : intent.getStringExtra(EXTRA_OPEN_GO);
+        if (go != null && go.matches("^(ak|ss|tab):[a-z0-9]{1,24}$")) { pendingOpenAk = go; pendingOpenAccount = null; }
         if (dashboardReady) mainHandler.postDelayed(this::applyPendingAccount, 150);
     }
 

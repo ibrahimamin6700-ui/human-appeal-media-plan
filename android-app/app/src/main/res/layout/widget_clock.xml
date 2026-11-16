@@ -1,21 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/w_root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal">
-    <LinearLayout android:layout_width="92dp" android:layout_height="match_parent" android:background="@drawable/w_bg_side" android:gravity="center" android:orientation="vertical">
-        <ImageView android:layout_width="68dp" android:layout_height="16dp" android:src="@drawable/hm_logo" android:scaleType="fitCenter" android:contentDescription="HEMERA"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="LIVE" android:textColor="#F3D58E" android:textSize="9.5sp" android:textStyle="bold" android:letterSpacing="0.14"/>
-    </LinearLayout>
-    <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
-        <ImageView android:id="@+id/w_sky" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:contentDescription="Muscat sky"/>
-        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginStart="18dp" android:layout_marginTop="16dp">
-            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
-                <TextClock android:layout_width="wrap_content" android:layout_height="wrap_content" android:format12Hour="h:mm" android:format24Hour="H:mm" android:timeZone="Asia/Muscat" android:textColor="#FFFFFF" android:textSize="46sp" android:fontFamily="sans-serif-thin" android:includeFontPadding="false"/>
-                <TextClock android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="3dp" android:layout_marginTop="6dp" android:format12Hour="a" android:format24Hour="" android:timeZone="Asia/Muscat" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold"/>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/w_root" android:layout_width="match_parent" android:layout_height="match_parent" android:layoutDirection="ltr">
+    <ImageView android:id="@+id/w_sky" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:contentDescription="Muscat sky"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal" android:layoutDirection="ltr">
+        <LinearLayout android:layout_width="92dp" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical" android:background="@drawable/w_bg_side">
+            <ImageView android:layout_width="68dp" android:layout_height="16dp" android:src="@drawable/hm_logo" android:scaleType="fitCenter" android:contentDescription="HEMERA"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="LIVE" android:textColor="#F3D58E" android:textSize="9.5sp" android:textStyle="bold" android:letterSpacing="0.14"/>
+        </LinearLayout>
+        <View android:layout_width="1.5dp" android:layout_height="match_parent" android:background="#E2B874"/>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginStart="18dp" android:layout_marginTop="16dp">
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
+                    <TextView android:id="@+id/w_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="--:--" android:textColor="#FFFFFF" android:textSize="46sp" android:fontFamily="sans-serif-thin" android:includeFontPadding="false"/>
+                    <TextView android:id="@+id/w_ampm" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="3dp" android:layout_marginTop="6dp" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold"/>
+                </LinearLayout>
+                <TextView android:id="@+id/w_date" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="#EEFFFFFF" android:textSize="12sp" android:textStyle="bold"/>
             </LinearLayout>
-            <TextClock android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:format12Hour="'Muscat · 'EEE d MMM" android:format24Hour="'Muscat · 'EEE d MMM" android:timeZone="Asia/Muscat" android:textColor="#EEFFFFFF" android:textSize="12sp" android:textStyle="bold"/>
-        </LinearLayout>
-        <LinearLayout android:id="@+id/w_pill" android:layout_width="wrap_content" android:layout_height="26dp" android:layout_gravity="top|end" android:layout_marginTop="14dp" android:layout_marginEnd="14dp" android:background="@drawable/w_pill_dark" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="9dp" android:paddingEnd="10dp">
-            <ImageView android:layout_width="7dp" android:layout_height="7dp" android:src="@drawable/w_dot" android:contentDescription="Live"/>
-            <TextView android:id="@+id/w_roas" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="—" android:textColor="#FFFFFF" android:textSize="11.5sp" android:textStyle="bold"/>
-        </LinearLayout>
-    </FrameLayout>
-</LinearLayout>
+            <LinearLayout android:id="@+id/w_pill" android:layout_width="wrap_content" android:layout_height="26dp" android:layout_gravity="top|end" android:layout_marginTop="14dp" android:layout_marginEnd="14dp" android:background="@drawable/w_pill_dark" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="9dp" android:paddingEnd="10dp">
+                <ImageView android:layout_width="7dp" android:layout_height="7dp" android:src="@drawable/w_dot" android:contentDescription="Live"/>
+                <TextView android:id="@+id/w_roas" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="—" android:textColor="#FFFFFF" android:textSize="11.5sp" android:textStyle="bold"/>
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
+</FrameLayout>

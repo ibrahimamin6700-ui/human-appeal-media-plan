@@ -487,29 +487,6 @@ public class MainActivity extends Activity {
         tag.animate().alpha(1f).scaleX(1f).setStartDelay(1600).setDuration(900)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(2f)).start();
 
-        // The thin gold bar near the bottom.
-        FrameLayout track = new FrameLayout(this);
-        android.graphics.drawable.GradientDrawable trackBg = new android.graphics.drawable.GradientDrawable();
-        trackBg.setColor(Color.argb(36, 255, 255, 255));
-        trackBg.setCornerRadius(dp(2));
-        track.setBackground(trackBg);
-        track.setClipToOutline(true);
-        View fill = new View(this);
-        android.graphics.drawable.GradientDrawable fillBg = new android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.parseColor("#C8943C"), Color.parseColor("#F6DC9C")});
-        fillBg.setCornerRadius(dp(2));
-        fill.setBackground(fillBg);
-        fill.setPivotX(0f);
-        fill.setScaleX(0f);
-        track.addView(fill, new FrameLayout.LayoutParams(-1, -1));
-        FrameLayout.LayoutParams trackParams = new FrameLayout.LayoutParams(dp(190), dp(2));
-        trackParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        trackParams.bottomMargin = dp(64);
-        splash.addView(track, trackParams);
-        fill.animate().scaleX(1f).setStartDelay(300).setDuration(1900)
-                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
-
         // The bar is not shown, but the hand-over code still fills it.
         splashFill = new View(this);
 
@@ -872,6 +849,13 @@ public class MainActivity extends Activity {
         public void onWidgetData(String json) {
             // runs off the main thread, so the season picture can be downloaded here
             WidgetKit.save(getApplicationContext(), json);
+        }
+
+        @JavascriptInterface
+        public void openOverlaySettings() {
+            runOnUiThread(() -> {
+                try { startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))); } catch (Throwable ignored) {}
+            });
         }
 
         @JavascriptInterface
@@ -1303,15 +1287,9 @@ public class MainActivity extends Activity {
         android.content.SharedPreferences p = getSharedPreferences(WidgetKit.PREFS, MODE_PRIVATE);
         if (p.getBoolean("bub_asked", false)) return;
         p.edit().putBoolean("bub_asked", true).apply();
+        // our own sheet in the page instead of the plain system dialog
         try {
-            new AlertDialog.Builder(this)
-                    .setTitle("Keep Alexandra on your screen?")
-                    .setMessage("Allow HEMERA to show over other apps, and Alexandra's bubble stays with you when you leave the app. Tap it to chat, or drag it to the X to close it.")
-                    .setPositiveButton("Allow", (d, w) -> {
-                        try { startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))); } catch (Throwable ignored) {}
-                    })
-                    .setNegativeButton("Not now", null)
-                    .show();
+            if (webView != null) webView.evaluateJavascript("(function(){try{if(window.hmOverlayAsk)hmOverlayAsk();}catch(e){}})();", null);
         } catch (Throwable ignored) {}
     }
 

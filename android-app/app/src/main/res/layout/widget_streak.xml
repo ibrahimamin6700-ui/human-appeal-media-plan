@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/w_root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/w_bg_cream" android:orientation="vertical" android:gravity="center_vertical" android:padding="14dp">
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/w_root" android:layoutDirection="ltr" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/w_bg_cream" android:orientation="vertical" android:gravity="center_vertical" android:padding="14dp">
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🔥" android:textSize="34sp"/>
     <TextView android:id="@+id/w_days" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="— days" android:textColor="#141B33" android:textSize="24sp" android:fontFamily="sans-serif-black"/>
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="above plan in a row" android:textColor="#8A6A1F" android:textSize="11sp" android:textStyle="bold"/>

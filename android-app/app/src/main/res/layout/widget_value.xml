@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/w_root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/w_bg_white" android:orientation="vertical" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="14dp" android:paddingBottom="12dp">
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/w_root" android:layoutDirection="ltr" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/w_bg_white" android:orientation="vertical" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="14dp" android:paddingBottom="12dp">
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="CONVERSION VALUE · 14 DAYS" android:textColor="#8A93B5" android:textSize="10sp" android:textStyle="bold" android:letterSpacing="0.1" android:maxLines="1"/>
         <TextView android:id="@+id/w_wk" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#1E9E4A" android:textSize="11.5sp" android:textStyle="bold"/>

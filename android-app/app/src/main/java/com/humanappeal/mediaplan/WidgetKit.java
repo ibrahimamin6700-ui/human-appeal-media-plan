@@ -75,6 +75,40 @@ public final class WidgetKit {
         catch (Throwable e) { return new JSONObject(); }
     }
 
+    // ---------- the clock: one update a minute ----------
+    static final String TICK = "com.humanappeal.mediaplan.CLOCK_TICK";
+
+    static void scheduleClock(Context c) {
+        try {
+            android.app.AlarmManager am = (android.app.AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
+            if (am == null) return;
+            long next = (System.currentTimeMillis() / 60000L + 1) * 60000L;
+            am.setRepeating(android.app.AlarmManager.RTC, next, 60000L, tickIntent(c));
+        } catch (Throwable ignored) {}
+    }
+
+    static void cancelClock(Context c) {
+        try {
+            android.app.AlarmManager am = (android.app.AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
+            if (am != null) am.cancel(tickIntent(c));
+        } catch (Throwable ignored) {}
+    }
+
+    static PendingIntent tickIntent(Context c) {
+        Intent i = new Intent(c, WidgetClock.class);
+        i.setAction(TICK);
+        return PendingIntent.getBroadcast(c, 4200, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    static void updateClocks(Context c) {
+        try {
+            AppWidgetManager m = AppWidgetManager.getInstance(c);
+            int[] ids = m.getAppWidgetIds(new ComponentName(c, WidgetClock.class));
+            if (ids == null || ids.length == 0) { cancelClock(c); return; }
+            update(c, m, ids, WidgetClock.class);
+        } catch (Throwable ignored) {}
+    }
+
     static void updateAll(Context c) {
         AppWidgetManager m = AppWidgetManager.getInstance(c);
         Class<?>[] all = {WidgetAlexandra.class, WidgetValue.class, WidgetStreak.class, WidgetSeason.class, WidgetClock.class};
@@ -171,6 +205,14 @@ public final class WidgetKit {
         JSONObject d = data(c);
         RemoteViews v = new RemoteViews(c.getPackageName(), R.layout.widget_clock);
         v.setImageViewBitmap(R.id.w_sky, sky(c, 620, 330));
+        // the time in English (the phone may be in Arabic), refreshed every minute
+        Calendar now = Calendar.getInstance(TimeZone.getTimeZone("Asia/Muscat"));
+        java.text.SimpleDateFormat t = new java.text.SimpleDateFormat("h:mm", Locale.US), ap = new java.text.SimpleDateFormat("a", Locale.US), dt = new java.text.SimpleDateFormat("EEE d MMM", Locale.US);
+        TimeZone tz = TimeZone.getTimeZone("Asia/Muscat");
+        t.setTimeZone(tz); ap.setTimeZone(tz); dt.setTimeZone(tz);
+        v.setTextViewText(R.id.w_time, t.format(now.getTime()));
+        v.setTextViewText(R.id.w_ampm, ap.format(now.getTime()));
+        v.setTextViewText(R.id.w_date, "Muscat · " + dt.format(now.getTime()));
         double r = d.optDouble("roas", 0);
         String acc = "ar".equals(d.optString("account")) ? "AR" : "USA";
         v.setTextViewText(R.id.w_roas, r > 0 ? acc + " · " + String.format(Locale.US, "%.2fx", r) : "HEMERA");
@@ -311,7 +353,7 @@ public final class WidgetKit {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         Path clip = new Path();
         float rad = h * 0.15f;
-        clip.addRoundRect(new RectF(0, 0, w, h), new float[]{0, 0, rad, rad, rad, rad, 0, 0}, Path.Direction.CW);
+        clip.addRoundRect(new RectF(0, 0, w, h), rad, rad, Path.Direction.CW);
         cv.clipPath(clip);
         p.setShader(new LinearGradient(0, 0, w * 0.3f, h, top, bottom, Shader.TileMode.CLAMP));
         cv.drawRect(0, 0, w, h, p);

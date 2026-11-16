@@ -109,7 +109,7 @@ public class BubbleService extends Service {
 
         target = new ImageView(this);
         target.setImageBitmap(closeTarget(tsize));
-        target.setAlpha(0f);
+        target.setVisibility(View.GONE);
         tp = new WindowManager.LayoutParams(tsize, tsize, type(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
@@ -145,7 +145,13 @@ public class BubbleService extends Service {
                         bp.y = Math.round(oy + dy);
                         // the red X shows once the bubble is in the lower half
                         boolean low = bp.y + size / 2f > d.heightPixels * 0.5f;
-                        if (target != null) target.animate().alpha(low ? 1f : 0f).setDuration(150).start();
+                        if (target != null) {
+                            int want = low ? View.VISIBLE : View.GONE;
+                            if (target.getVisibility() != want) {
+                                target.setVisibility(want);
+                                try { wm.updateViewLayout(target, tp); } catch (Throwable ignored) {}
+                            }
+                        }
                         float cx = tp.x + tsize / 2f, cy = tp.y + tsize / 2f;
                         boolean near = low && Math.hypot(bp.x + size / 2f - cx, bp.y + size / 2f - cy) < 90 * d.density;
                         if (near != hot) {
@@ -158,7 +164,7 @@ public class BubbleService extends Service {
                         return true;
                     case MotionEvent.ACTION_UP:
                     case MotionEvent.ACTION_CANCEL:
-                        if (target != null) target.animate().alpha(0f).scaleX(1f).scaleY(1f).setDuration(150).start();
+                        if (target != null) { target.setScaleX(1f); target.setScaleY(1f); target.setVisibility(View.GONE); }
                         if (!moved) {
                             try { openChat(2).send(); } catch (Throwable ignored) {}
                             stopSelf();

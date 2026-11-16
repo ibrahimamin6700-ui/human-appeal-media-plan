@@ -29,6 +29,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsetsController;
 import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -61,6 +62,10 @@ public class MainActivity extends Activity {
     public static final String DASHBOARD_URL = "https://script.google.com/macros/s/AKfycbzjgZ1nXxLTcFdeFCIEznOj2H0XCo9YGUeu1YF2pJdsQiOo_aM-Mn6HxKKNk8peEuM1Ig/exec";
     public static final String CHANNEL_ID = "media_plan_updates_v2";
     public static final String EXTRA_OPEN_ACCOUNT = "open_account";
+    public static final String EXTRA_OPEN_AK = "open_ak";
+    private static final int MIC_PERMISSION_REQUEST = 1203;
+    private PermissionRequest pendingMicRequest = null;
+    private String pendingOpenAk = null;
 
     private static final String LATEST_RELEASE_API = "https://api.github.com/repos/ibrahimamin6700-ui/human-appeal-media-plan/releases/latest";
     private static final String APK_ASSET_NAME = "Human-Appeal-Media-Plan.apk";
@@ -85,6 +90,8 @@ public class MainActivity extends Activity {
 
         pendingOpenAccount = normalizeAccount(
                 getIntent() == null ? null : getIntent().getStringExtra(EXTRA_OPEN_ACCOUNT));
+        pendingOpenAk = normalizeAk(getIntent() == null ? null : getIntent().getStringExtra(EXTRA_OPEN_AK));
+        if (pendingOpenAk != null) pendingOpenAccount = null;
         applySystemBars(HumanAppealApp.darkMode(this));
 
         rootView = new FrameLayout(this);
@@ -134,6 +141,23 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidShare");
 
         webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(final PermissionRequest request) {
+                // the microphone for Alexandra's voice messages; anything else is refused
+                runOnUiThread(() -> {
+                    boolean audio = false;
+                    for (String r : request.getResources()) if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) audio = true;
+                    if (!audio) { request.deny(); return; }
+                    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+                    } else {
+                        if (pendingMicRequest != null) { try { pendingMicRequest.deny(); } catch (Throwable ignored) {} }
+                        pendingMicRequest = request;
+                        requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, MIC_PERMISSION_REQUEST);
+                    }
+                });
+            }
+
             @Override
             public void onProgressChanged(WebView view, int progress) {
                 if (loadProgress != null && splashView != null && splashView.getVisibility() == View.VISIBLE) {
@@ -574,7 +598,34 @@ public class MainActivity extends Activity {
         return "ar".equalsIgnoreCase(account) ? "ar" : "usa";
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != MIC_PERMISSION_REQUEST || pendingMicRequest == null) return;
+        PermissionRequest req = pendingMicRequest;
+        pendingMicRequest = null;
+        boolean ok = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+        try {
+            if (ok) req.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+            else req.deny();
+        } catch (Throwable ignored) {}
+    }
+
+    private static String normalizeAk(String v) {
+        return "req".equals(v) || "chat".equals(v) ? v : null;
+    }
+
+    // an Alexandra notification: 'req' opens her access requests, 'chat' opens the chat
+    private void applyPendingAk() {
+        if (webView == null || pendingOpenAk == null) return;
+        final String to = pendingOpenAk;
+        pendingOpenAk = null;
+        String js = "(function(){var n=0;(function go(){try{if(typeof akOpenFrom==='function'){akOpenFrom('" + to + "');return}}catch(e){}if(++n<20)setTimeout(go,300)})()})();";
+        try { webView.evaluateJavascript(js, null); } catch (Throwable ignored) {}
+    }
+
     private void applyPendingAccount() {
+        mainHandler.postDelayed(this::applyPendingAk, 400);
         if (webView == null || pendingOpenAccount == null) return;
         final String account = pendingOpenAccount;
         pendingOpenAccount = null;
@@ -812,6 +863,8 @@ public class MainActivity extends Activity {
         setIntent(intent);
         pendingOpenAccount = normalizeAccount(
                 intent == null ? null : intent.getStringExtra(EXTRA_OPEN_ACCOUNT));
+        pendingOpenAk = normalizeAk(intent == null ? null : intent.getStringExtra(EXTRA_OPEN_AK));
+        if (pendingOpenAk != null) pendingOpenAccount = null;
         if (dashboardReady) mainHandler.postDelayed(this::applyPendingAccount, 150);
     }
 

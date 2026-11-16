@@ -43,6 +43,7 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
         String title = "Media Plan";
         String body = "Media Plan data was updated.";
         String accountKey = "usa";
+        String openAk = null;
 
         Map<String, String> data = message.getData();
         if (data != null) {
@@ -52,6 +53,7 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
             if (dataTitle != null && !dataTitle.isEmpty()) title = dataTitle;
             if (dataBody != null && !dataBody.isEmpty()) body = dataBody;
             if ("ar".equalsIgnoreCase(dataAccount)) accountKey = "ar";
+            if ("alexandra".equals(data.get("eventType"))) openAk = (title != null && title.toLowerCase().contains("request")) ? "req" : "chat";
         }
 
         if (message.getNotification() != null) {
@@ -63,10 +65,10 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
             }
         }
 
-        showNotification(title, body, accountKey);
+        showNotification(title, body, accountKey, openAk);
     }
 
-    private void showNotification(String title, String body, String accountKey) {
+    private void showNotification(String title, String body, String accountKey, String openAk) {
         try {
             if (Build.VERSION.SDK_INT >= 33 &&
                     checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -77,10 +79,11 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
 
             Intent open = new Intent(this, MainActivity.class);
             open.putExtra(MainActivity.EXTRA_OPEN_ACCOUNT, accountKey);
+            if (openAk != null) open.putExtra(MainActivity.EXTRA_OPEN_AK, openAk);
             open.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             PendingIntent pendingIntent = PendingIntent.getActivity(
                     this,
-                    "ar".equals(accountKey) ? AR_NOTIFICATION_ID : USA_NOTIFICATION_ID,
+                    openAk != null ? 2203 : "ar".equals(accountKey) ? AR_NOTIFICATION_ID : USA_NOTIFICATION_ID,
                     open,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
@@ -102,7 +105,7 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
 
             NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager != null) {
-                int id = "ar".equals(accountKey) ? AR_NOTIFICATION_ID : USA_NOTIFICATION_ID;
+                int id = openAk != null ? 2203 : "ar".equals(accountKey) ? AR_NOTIFICATION_ID : USA_NOTIFICATION_ID;
                 manager.notify(id, builder.build());
                 playSelectedSound(this, HumanAppealApp.notificationSound(this));
             }

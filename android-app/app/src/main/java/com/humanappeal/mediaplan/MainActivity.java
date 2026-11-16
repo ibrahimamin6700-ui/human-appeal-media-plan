@@ -126,7 +126,7 @@ public class MainActivity extends Activity {
         applySystemBars(HumanAppealApp.darkMode(this));
 
         rootView = new FrameLayout(this);
-        rootView.setBackgroundColor(Color.BLACK);
+        rootView.setBackgroundColor(Color.rgb(0x15, 0x26, 0x5F));
 
         try {
             webView = new WebView(this);
@@ -137,7 +137,8 @@ public class MainActivity extends Activity {
         }
 
         webView.setVisibility(View.VISIBLE);
-        webView.setBackgroundColor(HumanAppealApp.darkMode(this) ? Color.rgb(5, 6, 8) : Color.rgb(244, 246, 251));
+        // the intro's navy until the page has painted, so nothing light flashes between the opening screen and the intro
+        webView.setBackgroundColor(Color.rgb(0x15, 0x26, 0x5F));
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.setVerticalScrollBarEnabled(false);
         webView.setHorizontalScrollBarEnabled(false);
@@ -532,8 +533,14 @@ public class MainActivity extends Activity {
     }
 
     // Fades the opening screen after its fixed time, without waiting for the page.
+    private boolean introStarted;
+
     private void fadeSplashLook() {
         if (splashView == null || splashView.getVisibility() != View.VISIBLE) return;
+        if (!introStarted && !dashboardReady && android.os.SystemClock.uptimeMillis() - splashShownAt < 8000L) {
+            mainHandler.postDelayed(this::fadeSplashLook, 250);
+            return;
+        }
         if (splashFill != null) splashFill.animate().cancel();
         if (splashFill != null) splashFill.animate().scaleX(1f).setDuration(220).start();
         splashView.animate()
@@ -557,6 +564,7 @@ public class MainActivity extends Activity {
         if (dashboardReady && (splashView == null || splashView.getVisibility() != View.VISIBLE)) return;
 
         dashboardReady = true;
+        try { webView.setBackgroundColor(HumanAppealApp.darkMode(this) ? Color.rgb(5, 6, 8) : Color.rgb(244, 246, 251)); } catch (Throwable ignored) {}
 
         if (splashView != null && splashView.getVisibility() == View.VISIBLE
                 && android.os.SystemClock.uptimeMillis() - splashShownAt >= SPLASH_MS) {
@@ -837,9 +845,11 @@ public class MainActivity extends Activity {
         public void introStart() {
             // the web intro has started: drop the plain opening screen at once so it plays in full
             runOnUiThread(() -> {
+                introStarted = true;
                 if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
                     splashView.animate().cancel();
-                    splashView.animate().setStartDelay(0).alpha(0f).setDuration(120)
+                    // a short wait lets the intro paint its first frame underneath first
+                    splashView.animate().setStartDelay(90).alpha(0f).setDuration(160)
                             .withEndAction(() -> splashView.setVisibility(View.GONE)).start();
                 }
             });

@@ -58,6 +58,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
+    // one quiet thread for the home-screen widgets, so the page never waits for them
+    private static final java.util.concurrent.ExecutorService WIDGET_IO = java.util.concurrent.Executors.newSingleThreadExecutor();
+
     // The app shows the SEKNA web app, so design changes reach the phone without an app update.
     // SERVER_API_URL is the SEKNA server the background workers ask; DASHBOARD_URL (Apps Script) is its backup.
     public static final String WEB_APP_URL = "https://sekna-app.web.app/";
@@ -170,7 +173,6 @@ public class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         // Smoother scrolling and taps: the page is drawn ahead of the screen, and the page's
         // renderer keeps its priority while the app is in front.
-        settings.setOffscreenPreRaster(true);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
         }
@@ -857,8 +859,9 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void onWidgetData(String json) {
-            // runs off the main thread, so the season picture can be downloaded here
-            WidgetKit.save(getApplicationContext(), json);
+            // the page must not wait: the widget work (season picture download, drawing) runs on its own thread
+            final android.content.Context app = getApplicationContext();
+            WIDGET_IO.execute(() -> WidgetKit.save(app, json));
         }
 
         @JavascriptInterface

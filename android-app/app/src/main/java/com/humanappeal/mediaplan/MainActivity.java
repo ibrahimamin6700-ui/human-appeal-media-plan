@@ -422,11 +422,16 @@ public class MainActivity extends Activity {
                 new int[]{Color.argb(34, 226, 184, 116), Color.TRANSPARENT});
         goldLight.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
         goldLight.setGradientCenter(0.92f, 0.4f);
-        splash.setBackground(new android.graphics.drawable.LayerDrawable(
-                new android.graphics.drawable.Drawable[]{base, topLight, goldLight}));
+        // The web intro (Goldline Studio presents, then HEMERA) plays on the same blue, so the hand-off is seamless.
+        final android.graphics.drawable.GradientDrawable introBg = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.rgb(0x22, 0x3A, 0x86), Color.rgb(0x15, 0x26, 0x5F), Color.rgb(0x0A, 0x12, 0x38)});
+        introBg.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+        introBg.setGradientCenter(0.5f, 0.42f);
+        splash.setBackground(introBg);
         splash.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             int w = r - l, h = b - t;
-            if (w > 0) { topLight.setGradientRadius(Math.max(w, h) * 0.55f); goldLight.setGradientRadius(w * 0.45f); }
+            if (w > 0) { topLight.setGradientRadius(Math.max(w, h) * 0.55f); goldLight.setGradientRadius(w * 0.45f); introBg.setGradientRadius(Math.max(w, h) * 0.75f); }
         });
 
         LinearLayout brand = new LinearLayout(this);
@@ -458,6 +463,8 @@ public class MainActivity extends Activity {
 
         FrameLayout.LayoutParams brandParams = new FrameLayout.LayoutParams(-2, -2);
         brandParams.gravity = Gravity.CENTER;
+        // the old HEMERA reveal is no longer shown: the web's Goldline intro takes over
+        brand.setAlpha(0f);
         splash.addView(brand, brandParams);
 
         // The reveal: the word is uncovered from the left.
@@ -847,6 +854,18 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void setPushUser(String topic) {
             HumanAppealApp.setUserTopic(getApplicationContext(), topic);
+        }
+
+        @JavascriptInterface
+        public void introStart() {
+            // the web intro has started: drop the plain opening screen at once so it plays in full
+            runOnUiThread(() -> {
+                if (splashView != null && splashView.getVisibility() == View.VISIBLE) {
+                    splashView.animate().cancel();
+                    splashView.animate().setStartDelay(0).alpha(0f).setDuration(120)
+                            .withEndAction(() -> splashView.setVisibility(View.GONE)).start();
+                }
+            });
         }
 
         @JavascriptInterface

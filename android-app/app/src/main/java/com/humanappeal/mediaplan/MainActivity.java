@@ -1295,8 +1295,8 @@ public class MainActivity extends Activity {
     private void askOverlayOnce() {
         if (Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this)) return;
         android.content.SharedPreferences p = getSharedPreferences(WidgetKit.PREFS, MODE_PRIVATE);
-        if (p.getBoolean("bub_asked", false)) return;
-        p.edit().putBoolean("bub_asked", true).apply();
+        if (p.getBoolean("bub_asked2", false)) return;
+        p.edit().putBoolean("bub_asked2", true).apply();
         // our own sheet in the page instead of the plain system dialog
         try {
             if (webView != null) webView.evaluateJavascript("(function(){try{if(window.hmOverlayAsk)hmOverlayAsk();}catch(e){}})();", null);

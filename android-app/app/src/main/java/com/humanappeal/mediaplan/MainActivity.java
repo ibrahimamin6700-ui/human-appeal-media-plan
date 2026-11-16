@@ -29,6 +29,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsetsController;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -117,6 +118,7 @@ public class MainActivity extends Activity {
 
         pendingOpenAccount = normalizeAccount(
                 getIntent() == null ? null : getIntent().getStringExtra(EXTRA_OPEN_ACCOUNT));
+        pendingOpenTasks = getIntent() != null && getIntent().getBooleanExtra(SeknaNotifications.EXTRA_OPEN_TASKS, false);
         pendingOpenAk = normalizeAk(getIntent() == null ? null : getIntent().getStringExtra(EXTRA_OPEN_AK));
         if (pendingOpenAk != null) pendingOpenAccount = null;
         String go = getIntent() == null ? null : getIntent().getStringExtra(EXTRA_OPEN_GO);
@@ -193,10 +195,16 @@ public class MainActivity extends Activity {
             }
 
             @Override
-            public void onProgressChanged(WebView view, int progress) {
-                if (loadProgress != null && splashView != null && splashView.getVisibility() == View.VISIBLE) {
-                    int shown = Math.max(7, Math.min(progress, 96));
-                    loadProgress.setProgress(shown, true);
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                                             FileChooserParams params) {
+                if (filePathCallback != null) filePathCallback.onReceiveValue(null);
+                filePathCallback = callback;
+                try {
+                    startActivityForResult(params.createIntent(), FILE_CHOOSER_REQUEST);
+                } catch (Exception e) {
+                    filePathCallback = null;
+                    Toast.makeText(MainActivity.this, "Unable to open photos", Toast.LENGTH_SHORT).show();
+                    return false;
                 }
                 return true;
             }
@@ -834,6 +842,11 @@ public class MainActivity extends Activity {
                     HumanAppealApp.setLastAccount(getApplicationContext(), account);
                 }
             } catch (Throwable ignored) {}
+        }
+
+        @JavascriptInterface
+        public void setPushUser(String topic) {
+            HumanAppealApp.setUserTopic(getApplicationContext(), topic);
         }
 
         @JavascriptInterface

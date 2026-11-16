@@ -74,7 +74,7 @@ public class BubbleService extends Service {
             nm.createNotificationChannel(ch);
         }
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
-        b.setSmallIcon(R.drawable.ic_launcher)
+        b.setSmallIcon(R.drawable.ic_stat_humanappeal)
                 .setContentTitle("Alexandra is on your screen")
                 .setContentText("Tap her bubble to chat, or drag it to the X to close it.")
                 .setContentIntent(openChat(1))

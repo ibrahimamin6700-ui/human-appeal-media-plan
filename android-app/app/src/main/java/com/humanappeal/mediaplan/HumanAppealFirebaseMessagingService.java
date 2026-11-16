@@ -43,6 +43,7 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
         String title = "Media Plan";
         String body = "Media Plan data was updated.";
         String accountKey = "usa";
+        String eventType = "";
         String openAk = null;
 
         Map<String, String> data = message.getData();
@@ -65,6 +66,31 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
             if (message.getNotification().getBody() != null && !message.getNotification().getBody().isEmpty()) {
                 body = message.getNotification().getBody();
             }
+        }
+
+        // Team messages and new app versions come from SEKNA and use the SEKNA mark.
+        if ("announcement".equals(eventType)) {
+            SeknaNotifications.show(this, SeknaNotifications.ANNOUNCEMENT_ID, title, body, false);
+            return;
+        }
+        // Team Tasks reach only the person they are for (their own topic) and open My Tasks.
+        if ("tasks".equals(eventType)) {
+            SeknaNotifications.show(this, SeknaNotifications.TASKS_ID, title, body, false, true);
+            return;
+        }
+        // A season greeting on its day: the season's picture with the greeting.
+        if ("greeting".equals(eventType)) {
+            SeknaNotifications.showPicture(this, SeknaNotifications.GREETING_ID, title, body, data == null ? null : data.get("image"));
+            return;
+        }
+        // A season reminder (days before it starts) shows the season's picture too.
+        if ("season".equals(eventType) && data != null && data.get("image") != null && !data.get("image").isEmpty()) {
+            SeknaNotifications.showPicture(this, SeknaNotifications.SEASON_ID, title, body, data.get("image"));
+            return;
+        }
+        if ("app_update".equals(eventType)) {
+            SeknaNotifications.show(this, SeknaNotifications.APP_UPDATE_ID, title, body, true);
+            return;
         }
 
         showNotification(title, body, accountKey, openAk);

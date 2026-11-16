@@ -221,6 +221,13 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onPageCommitVisible(WebView view, String url) {
+                super.onPageCommitVisible(view, url);
+                // the page has painted: the opening screen may go (it no longer waits for the numbers)
+                if (url != null && url.startsWith(WEB_APP_URL)) pageVisible = true;
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 if ("about:blank".equalsIgnoreCase(url)) return;
@@ -536,10 +543,11 @@ public class MainActivity extends Activity {
 
     // Fades the opening screen after its fixed time, without waiting for the page.
     private boolean introStarted;
+    private volatile boolean pageVisible;
 
     private void fadeSplashLook() {
         if (splashView == null || splashView.getVisibility() != View.VISIBLE) return;
-        if (!introStarted && !dashboardReady && android.os.SystemClock.uptimeMillis() - splashShownAt < 8000L) {
+        if (!introStarted && !dashboardReady && !pageVisible && android.os.SystemClock.uptimeMillis() - splashShownAt < 8000L) {
             mainHandler.postDelayed(this::fadeSplashLook, 250);
             return;
         }

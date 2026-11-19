@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <queries>
         <package android:name="com.whatsapp" />
@@ -51,6 +53,18 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_info_alexandra" />
         </receiver>
+
+        <receiver android:name=".WidgetCall" android:exported="false" android:label="@string/wn_call">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_info_call" />
+        </receiver>
+
+        <service
+            android:name=".CallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <receiver android:name=".WidgetValue" android:exported="false" android:label="@string/wn_value">
             <intent-filter>

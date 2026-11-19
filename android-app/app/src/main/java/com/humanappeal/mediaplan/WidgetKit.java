@@ -111,7 +111,7 @@ public final class WidgetKit {
 
     static void updateAll(Context c) {
         AppWidgetManager m = AppWidgetManager.getInstance(c);
-        Class<?>[] all = {WidgetAlexandra.class, WidgetValue.class, WidgetStreak.class, WidgetSeason.class, WidgetClock.class};
+        Class<?>[] all = {WidgetAlexandra.class, WidgetCall.class, WidgetValue.class, WidgetStreak.class, WidgetSeason.class, WidgetClock.class};
         for (Class<?> k : all) {
             try {
                 int[] ids = m.getAppWidgetIds(new ComponentName(c, k));
@@ -125,6 +125,7 @@ public final class WidgetKit {
             try {
                 RemoteViews v;
                 if (k == WidgetAlexandra.class) v = alexandra(c);
+                else if (k == WidgetCall.class) v = call(c);
                 else if (k == WidgetValue.class) v = value(c);
                 else if (k == WidgetStreak.class) v = streak(c);
                 else if (k == WidgetSeason.class) v = season(c);
@@ -153,6 +154,54 @@ public final class WidgetKit {
         v.setOnClickPendingIntent(R.id.w_c2, go(c, "ak:sheets", 4));
         v.setOnClickPendingIntent(R.id.w_c3, go(c, "ak:voice", 5));
         return v;
+    }
+
+    /** v600 Alexandra's face, yesterday's numbers; a tap anywhere starts a voice call with her. */
+    static RemoteViews call(Context c) {
+        JSONObject d = data(c);
+        RemoteViews v = new RemoteViews(c.getPackageName(), R.layout.widget_call);
+        v.setImageViewBitmap(R.id.w_face, callFace(c, 520, 600));
+        String cur = d.optString("cur", "");
+        double sp = d.optDouble("spend", 0), val = d.optDouble("value", 0), r = d.optDouble("roas", 0);
+        String day = d.optString("date", "");
+        String when = "Latest day";
+        try {
+            Calendar y = Calendar.getInstance(); y.add(Calendar.DAY_OF_YEAR, -1);
+            String ys = new java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(y.getTime());
+            if (ys.equals(day)) when = "Yesterday";
+        } catch (Throwable ignored) {}
+        if (sp > 0) {
+            v.setTextViewText(R.id.w_num, when + " · " + cur + whole(sp));
+            v.setTextViewText(R.id.w_sub, (val > 0 ? "value " + cur + whole(val) : "") + (r > 0 ? " · " + String.format(Locale.US, "%.2fx", r) : ""));
+        } else {
+            v.setTextViewText(R.id.w_num, "Tap to call");
+            v.setTextViewText(R.id.w_sub, "");
+        }
+        PendingIntent p = go(c, "ak:call", 10);
+        v.setOnClickPendingIntent(R.id.w_root, p);
+        v.setOnClickPendingIntent(R.id.w_call, p);
+        return v;
+    }
+
+    /** Her face (bundled), cropped to the widget's shape, darker at the bottom for the text. */
+    static Bitmap callFace(Context c, int w, int h) {
+        Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas cv = new Canvas(out);
+        cv.drawColor(0xFF0B1430);
+        try {
+            Bitmap src = BitmapFactory.decodeResource(c.getResources(), R.drawable.w_alex_face);
+            if (src != null) {
+                float s = Math.max(w / (float) src.getWidth(), h / (float) src.getHeight());
+                float dw = src.getWidth() * s, dh = src.getHeight() * s;
+                RectF dst = new RectF((w - dw) / 2f, 0, (w + dw) / 2f, dh);
+                Paint ip = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+                cv.drawBitmap(src, null, dst, ip);
+            }
+        } catch (Throwable ignored) {}
+        Paint g = new Paint();
+        g.setShader(new LinearGradient(0, h * 0.45f, 0, h, 0x00000000, 0xE6050A1E, Shader.TileMode.CLAMP));
+        cv.drawRect(0, h * 0.45f, w, h, g);
+        return out;
     }
 
     static RemoteViews value(Context c) {

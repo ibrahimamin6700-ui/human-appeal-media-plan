@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/w_root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/w_bg_call" android:clipToOutline="true" android:layoutDirection="ltr">
+    <ImageView android:id="@+id/w_face" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop" android:contentDescription="Alexandra"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="bottom" android:orientation="horizontal" android:gravity="center_vertical" android:paddingStart="14dp" android:paddingEnd="10dp" android:paddingBottom="12dp">
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+            <TextView android:id="@+id/w_name" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Alexandra" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" android:maxLines="1"/>
+            <TextView android:id="@+id/w_num" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="1dp" android:text="Open HEMERA to load" android:textColor="#E9C46A" android:textSize="12.5sp" android:textStyle="bold" android:maxLines="1"/>
+            <TextView android:id="@+id/w_sub" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="" android:textColor="#CCFFFFFF" android:textSize="10.5sp" android:maxLines="1"/>
+        </LinearLayout>
+        <FrameLayout android:id="@+id/w_call" android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/w_call_btn">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/w_ic_call" android:contentDescription="Call"/>
+        </FrameLayout>
+    </LinearLayout>
+</FrameLayout>

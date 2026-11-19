@@ -400,6 +400,12 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onDestroy() {
+        try { CallService.stop(this); } catch (Throwable ignored) {}
+        super.onDestroy();
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
         if (!authInProgress && !isChangingConfigurations()) backgroundedAt = System.currentTimeMillis();
@@ -880,6 +886,28 @@ public class MainActivity extends Activity {
             if (enabled) {
                 runOnUiThread(MainActivity.this::requestNotificationPermissionIfNeeded);
             }
+        }
+
+        // v600 a voice call with Alexandra keeps going with the screen locked (foreground service for the mic)
+        @JavascriptInterface
+        public void setCallActive(boolean on) {
+            runOnUiThread(() -> {
+                try {
+                    if (on) CallService.start(MainActivity.this); else CallService.stop(MainActivity.this);
+                    if (webView != null && Build.VERSION.SDK_INT >= 26)
+                        webView.setRendererPriorityPolicy(on ? WebView.RENDERER_PRIORITY_IMPORTANT : WebView.RENDERER_PRIORITY_IMPORTANT, !on);
+                } catch (Throwable ignored) {}
+            });
+        }
+
+        // v600 the notification sound in Alexandra's voice (chosen by the owner, sent by the page)
+        @JavascriptInterface
+        public void setNotificationVoice(String b64, String ver) {
+            try {
+                byte[] bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+                java.io.File f = new java.io.File(getFilesDir(), "ak_notif.wav");
+                try (java.io.FileOutputStream o = new java.io.FileOutputStream(f)) { o.write(bytes); }
+            } catch (Throwable ignored) {}
         }
 
         @JavascriptInterface

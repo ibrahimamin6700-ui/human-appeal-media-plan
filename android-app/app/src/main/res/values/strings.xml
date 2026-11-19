@@ -1,6 +1,8 @@
 <resources>
     <string name="app_name">HEMERA</string>
     <string name="wn_alexandra">Ask Alexandra</string>
+    <string name="wn_call">Call Alexandra</string>
+    <string name="wd_call">Alexandra\'s face and yesterday\'s numbers; tap to call her</string>
     <string name="wn_value">Conversion value · 14 days</string>
     <string name="wn_streak">Days above plan</string>
     <string name="wn_season">Next season</string>

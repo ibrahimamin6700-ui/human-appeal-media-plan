@@ -114,7 +114,8 @@ public class HumanAppealApp extends Application {
     }
 
     public static String sanitizeSound(String sound) {
-        if ("human_appeal".equals(sound) ||
+        if ("alexandra".equals(sound) ||
+                "human_appeal".equals(sound) ||
                 "gentle_bell".equals(sound) ||
                 "soft_ping".equals(sound)) {
             return sound;

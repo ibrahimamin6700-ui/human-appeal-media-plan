@@ -153,6 +153,11 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
             playDefaultNotificationSound(appContext);
             return;
         }
+        // v600 Alexandra's voice (a short line the owner picked); the bell if it is not on the phone yet
+        if ("alexandra".equals(safe)) {
+            if (!playVoice(appContext)) playDefaultNotificationSound(appContext);
+            return;
+        }
 
         new Thread(() -> {
             AudioTrack track = null;
@@ -193,6 +198,26 @@ public class HumanAppealFirebaseMessagingService extends FirebaseMessagingServic
                 }
             }
         }, "ha-notification-tone").start();
+    }
+
+    private static boolean playVoice(Context context) {
+        try {
+            java.io.File f = new java.io.File(context.getFilesDir(), "ak_notif.wav");
+            if (!f.exists() || f.length() < 1000) return false;
+            android.media.MediaPlayer mp = new android.media.MediaPlayer();
+            mp.setAudioAttributes(new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build());
+            mp.setDataSource(f.getAbsolutePath());
+            mp.setOnCompletionListener(android.media.MediaPlayer::release);
+            mp.setOnErrorListener((m, a, b) -> { try { m.release(); } catch (Throwable ignored) {} return true; });
+            mp.prepare();
+            mp.start();
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     private static void stopActiveSound() {
